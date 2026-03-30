@@ -1,0 +1,28 @@
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+
+# Environment variables
+.env
+
+# Build folders
+dist/
+build/
+
+# Python (for your ML part)
+__pycache__/
+*.pyc
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# HuggingFace / cache
+.cache/
