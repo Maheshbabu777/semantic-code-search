@@ -5,18 +5,20 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "jest"
+    "dev": "nodemon src/index.js",
+    "test": "vitest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "nodemon": "^3.1.14"
+    "react-router-dom": "^7.13.2"
   },
   "devDependencies": {
-    "jest": "^30.3.0"
+    "nodemon": "^3.1.14",
+    "vitest": "^4.1.2"
   }
 }
