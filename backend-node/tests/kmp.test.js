@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'vitest';
-import { kmpSearch, buildFailureTable } from '../src/search/kmp';
+import { describe, expect, test } from 'vitest';
+import { buildFailureTable, kmpSearch } from '../src/search/kmp';
 
 describe('KMP', () => {
     test('finds single match', () => {

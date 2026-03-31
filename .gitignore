@@ -1,28 +1,59 @@
-# Node modules
-node_modules/
-
-# Logs
-logs
+# =========================
+# GENERAL
+# =========================
 *.log
-
-# Environment variables
+logs/
 .env
+.env.*
 
-# Build folders
-dist/
-build/
+# =========================
+# NODE (backend-node)
+# =========================
+backend-node/node_modules/
+backend-node/dist/
+backend-node/build/
+backend-node/npm-debug.log*
+backend-node/yarn-error.log*
 
-# Python (for your ML part)
-__pycache__/
-*.pyc
+# =========================
+# PYTHON (backend-python)
+# =========================
+backend-python/__pycache__/
+backend-python/*.pyc
+backend-python/*.pyo
+backend-python/*.pyd
+
+# Python environments
+backend-python/venv/
+backend-python/env/
+backend-python/.venv/
+backend-python/conda-env/
+
+# Python build files
+backend-python/*.egg-info/
+backend-python/.pytest_cache/
+backend-python/.mypy_cache/
+
+# =========================
+# ROOT ENV (if any)
+# =========================
 venv/
+env/
+.venv/
 
-# OS files
+# =========================
+# IDE / EDITOR
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS FILES
+# =========================
 .DS_Store
 Thumbs.db
 
-# VS Code
-.vscode/
-
-# HuggingFace / cache
+# =========================
+# CACHE (HF, etc.)
+# =========================
 .cache/

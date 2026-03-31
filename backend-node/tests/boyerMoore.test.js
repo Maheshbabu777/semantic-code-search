@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'vitest';
-import { boyerMoore, badCharTable } from '../src/search/boyerMoore';
+import { describe, expect, test } from 'vitest';
+import { badCharTable, boyerMoore } from '../src/search/boyerMoore';
 
 describe('BoyerMoore', () => {
     test('finds single match', () => {
