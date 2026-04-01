@@ -6,9 +6,9 @@ MODEL_NAME = "microsoft/codebert-base"
 model = SentenceTransformer(MODEL_NAME)
 
 def get_embedding(text: str) -> list[float]:
-    embedding = model.encode(text, normalize_embedding=True)
+    embedding = model.encode(text, normalize_embeddings=True)
     return embedding.tolist()
 
 def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
-    embeddings = model.encode(texts, normalize_embedding=True)
+    embeddings = model.encode(texts, normalize_embeddings=True)
     return embeddings.tolist() 
