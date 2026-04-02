@@ -1,7 +1,7 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-MODEL_NAME = "microsoft/codebert-base"
+MODEL_NAME = "flax-sentence-embeddings/st-codesearch-distilroberta-base"
 
 model = SentenceTransformer(MODEL_NAME)
 
