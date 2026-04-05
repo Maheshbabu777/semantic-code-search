@@ -35,6 +35,13 @@ backend-python/.pytest_cache/
 backend-python/.mypy_cache/
 
 # =========================
+# PYTHON (all folders, recursive)
+# =========================
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+
+# =========================
 # ROOT ENV (if any)
 # =========================
 venv/
@@ -57,3 +64,36 @@ Thumbs.db
 # CACHE (HF, etc.)
 # =========================
 .cache/
+
+# =========================
+# CHROMADB
+# =========================
+backend-python/chroma_db/
+
+# =========================
+# TEMP FOLDERS (cloned repos + uploads)
+# =========================
+/tmp/codesearch_*
+backend-python/tmp/
+
+# =========================
+# HUGGINGFACE MODEL WEIGHTS
+# =========================
+*.bin
+*.safetensors
+*.h5
+*.ot
+*.onnx
+
+# =========================
+# UPLOADED ZIPS
+# =========================
+*.zip
+
+# =========================
+# FRONTEND (for when you build it)
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env
