@@ -1,10 +1,15 @@
 import chromadb
 from app.embeddings import get_embedding
+import app.state as state
 
-client = chromadb.Client()
+client = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_or_create_collection(name="code_chunks")
 
-def search_code(query: str, top_k: int = 5) -> list[dict]:
+def search_code(query: str, session_id: str, top_k: int = 5) -> list[dict]:
+    if session_id not in state.sessions:
+        raise ValueError(f"Invalid or expired session. Index your codebase first.")
+    
+    collection = client.get_or_create_collection(name=f"code_{session_id}")
     embedding = get_embedding(query)
 
     results = collection.query(

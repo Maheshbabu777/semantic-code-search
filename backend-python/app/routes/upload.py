@@ -1,0 +1,42 @@
+import uuid
+import os
+import shutil
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from app.uploader import extract_upload
+from app.indexer import index_codebase
+import app.state as state
+
+router = APIRouter()
+
+@router.post("/")
+async def upload(file: UploadFile = File(...)):
+    if not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only .zip files supported")
+    
+    try:
+        session_id = str(uuid.uuid4())
+        tmp_zip = f"/tmp/{session_id}.zip"
+        with open(tmp_zip, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        tmp_dir = extract_upload(tmp_zip)
+
+        os.remove(tmp_zip)
+
+        result = index_codebase(tmp_dir, session_id)
+
+        state.sessions[session_id] = {
+            "collection_id": session_id,
+            "session_folder": tmp_dir,
+            "source": file.filename
+        }
+
+        return {
+            **result,
+            "session_id": session_id,
+            "source": file.filename
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process upload: {str(e)}")

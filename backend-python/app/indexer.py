@@ -1,9 +1,10 @@
 import os
+import hashlib
 import chromadb
 from app.chunker import chunk_file
 from app.embeddings import get_embeddings_batch
 
-client = chromadb.Client()
+client = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_or_create_collection(name="code_chunks")
 
 SUPPORTED_EXTENSIONS = {
@@ -13,9 +14,14 @@ SUPPORTED_EXTENSIONS = {
     ".sh"
 }
 
-def index_codebase(folder_path: str) -> dict:
+def get_collection(session_id: str):
+    return client.get_or_create_collection(name=f"code_{session_id}")
+
+def index_codebase(folder_path: str, session_id: str) -> dict:
     if not os.path.exists(folder_path):
         raise ValueError(f"Folder not found: {folder_path}")
+
+    collection = get_collection(session_id)
 
     all_chunks = []
 
@@ -37,8 +43,13 @@ def index_codebase(folder_path: str) -> dict:
     codes = [chunk["code"] for chunk in all_chunks]
     embeddings = get_embeddings_batch(codes)
 
+    ids = [
+        hashlib.md5(f"{chunk['filepath']}:{chunk['start_line']}".encode()).hexdigest()
+        for chunk in all_chunks
+    ]
+
     collection.add(
-        ids=[f"chunk_{i}" for i in range(len(all_chunks))],
+        ids=ids,
         embeddings=embeddings,
         documents=codes,
         metadatas=[{
