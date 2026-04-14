@@ -1,6 +1,7 @@
 import uuid
 import os
 import shutil
+import tempfile
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from app.uploader import extract_upload
 from app.indexer import index_codebase
@@ -15,7 +16,9 @@ async def upload(file: UploadFile = File(...)):
     
     try:
         session_id = str(uuid.uuid4())
-        tmp_zip = f"/tmp/{session_id}.zip"
+
+        tmp_zip = os.path.join(tempfile.gettempdir(), f"{session_id}.zip")
+
         with open(tmp_zip, "wb") as f:
             content = await file.read()
             f.write(content)
