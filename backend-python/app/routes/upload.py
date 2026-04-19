@@ -1,3 +1,4 @@
+import time
 import uuid
 import os
 import shutil
@@ -32,7 +33,8 @@ async def upload(file: UploadFile = File(...)):
         state.sessions[session_id] = {
             "collection_id": session_id,
             "session_folder": tmp_dir,
-            "source": file.filename
+            "source": file.filename,
+            "created_at": time.time()
         }
 
         return {

@@ -1,4 +1,5 @@
 import uuid
+import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.github import clone_repo, cleanup_repo
@@ -21,7 +22,8 @@ def index(req: IndexRequest):
         state.sessions[session_id] = {
             "collection_id": session_id,
             "session_folder": tmp_dir,
-            "github_url": req.github_url
+            "github_url": req.github_url,
+            "created_at": time.time()
         }
 
         return {

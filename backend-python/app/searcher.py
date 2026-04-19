@@ -23,7 +23,7 @@ def search_code(query: str, session_id: str, top_k: int = 5) -> list[dict]:
             "filepath": results["metadatas"][0][i]["filepath"],
             "start_line": results["metadatas"][0][i]["start_line"],
             "end_line": results["metadatas"][0][i]["end_line"],
-            "score": round(1 - results["distances"][0][i],4)
+            "score": max(0.0, round(1 - results["distances"][0][i], 4))
         })
     
     return output

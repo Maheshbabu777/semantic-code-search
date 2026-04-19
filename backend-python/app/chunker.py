@@ -1,7 +1,7 @@
 import re
 
 def chunk_file(filepath: str) -> list[dict]:
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
     chunks = []

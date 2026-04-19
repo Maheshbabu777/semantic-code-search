@@ -4,8 +4,8 @@ import chromadb
 from app.chunker import chunk_file
 from app.embeddings import get_embeddings_batch
 
-client = chromadb.PersistentClient(path="./chroma_db")
-collection = client.get_or_create_collection(name="code_chunks")
+CHROMA_PATH=os.getenv("CHROMA_PATH", "./chroma_db")
+client = chromadb.PersistentClient(path=CHROMA_PATH)
 
 SUPPORTED_EXTENSIONS = {
     ".js", ".jsx", ".ts", ".tsx",
@@ -39,6 +39,11 @@ def index_codebase(folder_path: str, session_id: str) -> dict:
 
     if not all_chunks:
         return { "indexed": 0, "message": "No supported files found." }
+    
+    MAX_CHUNKS = 2000
+    if len(all_chunks) > MAX_CHUNKS:
+        raise ValueError(f"Codebase too large: {len(all_chunks)}, "
+                         f"limit is {MAX_CHUNKS}. Index them in smaller parts.")
 
     codes = [chunk["code"] for chunk in all_chunks]
     embeddings = get_embeddings_batch(codes)
