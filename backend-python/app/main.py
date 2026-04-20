@@ -7,6 +7,7 @@ from app.routes.upload import router as upload_router
 from app.routes.sessions import router as session_router
 from app.github import cleanup_repo
 import app.state as state
+from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -15,7 +16,15 @@ async def lifespan(app: FastAPI):
         cleanup_repo(session["session_folder"])
     print(f"Cleaned up {len(state.sessions)} sessions")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(title="Semantic Code Search - Python API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 app.include_router(embed_router, prefix="/embed")
 app.include_router(index_router, prefix="/index")
