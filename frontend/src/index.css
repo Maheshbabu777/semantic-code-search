@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -44,7 +44,7 @@ body {
 
 /* ─── Typography ─── */
 h1 {
-  font-size: 2rem;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
   font-weight: 300;
   letter-spacing: -0.03em;
   color: var(--text);
@@ -56,11 +56,10 @@ h1 span {
 }
 
 .subtitle {
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--text-muted);
   margin-top: 6px;
-  font-weight: 300;
-  font-style: italic;
+  font-weight: 400;
 }
 
 /* ─── Inputs ─── */
