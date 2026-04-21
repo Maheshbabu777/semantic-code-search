@@ -18,14 +18,10 @@ export default function SearchPage() {
     if (!sessionId) navigate('/');
   }, [sessionId, navigate]);
 
-  // cleanup on tab close
   useEffect(() => {
     function handleUnload() {
       if (sessionId) {
-        navigator.sendBeacon(
-          `http://localhost:8000/session/${sessionId}`,
-          JSON.stringify({})
-        );
+        navigator.sendBeacon(`http://localhost:8000/session/${sessionId}`);
       }
     }
     window.addEventListener('beforeunload', handleUnload);
@@ -33,10 +29,11 @@ export default function SearchPage() {
   }, [sessionId]);
 
   async function handleSearch() {
-    if (!query.trim()) return;
+    if (!query.trim() || loading) return;
     setError('');
     setLoading(true);
     setSearched(true);
+    setResults([]);
     try {
       const data = await searchCode(query.trim(), sessionId);
       setResults(data.results);
@@ -48,80 +45,72 @@ export default function SearchPage() {
   }
 
   async function handleExit() {
-    try {
-      await deleteSession(sessionId);
-    } catch (_) {}
+    try { await deleteSession(sessionId); } catch (_) {}
     localStorage.removeItem('session_id');
     localStorage.removeItem('indexed_count');
     navigate('/');
   }
 
   return (
-    <div className="page">
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-      }}>
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 7,
-          fontSize: 13,
-          fontWeight: 500,
-          background: '#E1F5EE',
-          color: '#0F6E56',
-          padding: '5px 12px',
-          borderRadius: 20,
-        }}>
-          <span style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: '#1D9E75',
-            display: 'inline-block',
-          }} />
-          {indexedCount} chunks indexed
+    <div className="page page-enter">
+      <div className="search-header">
+        <span className="status-pill">
+          <span className="status-dot" />
+          {Number(indexedCount).toLocaleString()} chunks indexed
         </span>
-        <button className="danger" onClick={handleExit}>
-          Exit session
+        <button className="btn-exit" onClick={handleExit}>
+          exit session
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+      <div className="search-row" style={{ marginBottom: 32 }}>
         <input
           type="text"
-          placeholder="function that finds a pattern in text..."
+          placeholder="describe what you're looking for..."
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSearch()}
+          autoFocus
         />
         <button
-          className="primary"
+          className="btn-primary"
           onClick={handleSearch}
           disabled={loading || !query.trim()}
-          style={{ whiteSpace: 'nowrap' }}
         >
-          {loading ? 'Searching...' : 'Search'}
+          {loading ? 'searching...' : 'Search'}
         </button>
       </div>
 
-      {error && (
-        <p style={{ fontSize: 13, color: '#A32D2D', marginBottom: 16 }}>
-          {error}
-        </p>
+      {error && <p className="error-msg">{error}</p>}
+
+      {loading && (
+        <div style={{ padding: '12px 0' }}>
+          <div className="loading-bar-wrap">
+            <div className="loading-bar" />
+          </div>
+        </div>
       )}
 
       {searched && !loading && results.length === 0 && !error && (
-        <p style={{ fontSize: 14, color: '#9b9a95', textAlign: 'center', marginTop: 40 }}>
-          No results found. Try a different query.
-        </p>
+        <p className="empty-state">no results found — try rephrasing your query</p>
       )}
 
-      {results.map((result, i) => (
-        <ResultCard key={i} result={result} />
-      ))}
+      {results.length > 0 && (
+        <>
+          <p style={{
+            fontSize: '0.75rem',
+            color: 'var(--text-dim)',
+            fontFamily: 'var(--font-mono)',
+            marginBottom: 16,
+            fontStyle: 'italic',
+          }}>
+            {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
+          </p>
+          {results.map((result, i) => (
+            <ResultCard key={i} result={result} index={i} />
+          ))}
+        </>
+      )}
     </div>
   );
 }

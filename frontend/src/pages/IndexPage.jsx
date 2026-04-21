@@ -1,6 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { indexRepo, uploadZip } from '../api/client';
+
+const LOADING_MESSAGES = [
+  'Cloning repository...',
+  'Walking the file tree...',
+  'Chunking functions and methods...',
+  'Generating semantic embeddings...',
+  'Building vector index...',
+  'Almost there...',
+];
 
 export default function IndexPage() {
   const navigate = useNavigate();
@@ -9,25 +18,37 @@ export default function IndexPage() {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [msgIndex, setMsgIndex] = useState(0);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (loading) {
+      setMsgIndex(0);
+      intervalRef.current = setInterval(() => {
+        setMsgIndex(i => (i + 1) % LOADING_MESSAGES.length);
+      }, 2200);
+    } else {
+      clearInterval(intervalRef.current);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [loading]);
 
   async function handleIndex() {
     setError('');
+    if (tab === 'github' && !githubUrl.trim()) {
+      setError('Please enter a GitHub URL.');
+      return;
+    }
+    if (tab === 'upload' && !file) {
+      setError('Please select a zip file.');
+      return;
+    }
     setLoading(true);
     try {
       let result;
       if (tab === 'github') {
-        if (!githubUrl.trim()) {
-          setError('Please enter a GitHub URL.');
-          setLoading(false);
-          return;
-        }
         result = await indexRepo(githubUrl.trim());
       } else {
-        if (!file) {
-          setError('Please select a zip file.');
-          setLoading(false);
-          return;
-        }
         result = await uploadZip(file);
       }
       localStorage.setItem('session_id', result.session_id);
@@ -41,92 +62,74 @@ export default function IndexPage() {
   }
 
   return (
-    <div className="page">
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 6 }}>
-          Semantic Code Search
-        </h1>
-        <p style={{ fontSize: 14, color: '#6b6a65' }}>
-          Search any codebase with natural language
-        </p>
+    <div className="page page-enter">
+      <div className="index-header">
+        <h1>Semantic<br /><span>Code Search</span></h1>
+        <p className="subtitle">search any codebase with natural language</p>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        <button
-          className={tab === 'github' ? 'ghost' : 'ghost'}
-          onClick={() => setTab('github')}
-          style={{
-            borderColor: tab === 'github' ? '#7F77DD' : '#d0cec7',
-            color: tab === 'github' ? '#534AB7' : '#6b6a65',
-            fontWeight: tab === 'github' ? 600 : 400,
-          }}
-        >
-          GitHub URL
-        </button>
-        <button
-          className="ghost"
-          onClick={() => setTab('upload')}
-          style={{
-            borderColor: tab === 'upload' ? '#7F77DD' : '#d0cec7',
-            color: tab === 'upload' ? '#534AB7' : '#6b6a65',
-            fontWeight: tab === 'upload' ? 600 : 400,
-          }}
-        >
-          Upload zip
-        </button>
-      </div>
-
-      {tab === 'github' ? (
-        <input
-          type="text"
-          placeholder="https://github.com/username/repo"
-          value={githubUrl}
-          onChange={e => setGithubUrl(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleIndex()}
-          style={{ marginBottom: 14 }}
-        />
-      ) : (
-        <div style={{ marginBottom: 14 }}>
-          <input
-            type="file"
-            accept=".zip"
-            onChange={e => setFile(e.target.files[0])}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              border: '0.5px solid #d0cec7',
-              borderRadius: 8,
-              background: '#fafaf8',
-              cursor: 'pointer',
-            }}
-          />
+      {loading ? (
+        <div className="loading-wrap">
+          <div className="loading-bar-wrap">
+            <div className="loading-bar" />
+          </div>
+          <div className="loading-text-wrap">
+            <div className="spinner-ring" />
+            <p className="loading-msg" key={msgIndex}>
+              {LOADING_MESSAGES[msgIndex]}
+            </p>
+          </div>
         </div>
-      )}
+      ) : (
+        <div className="index-form">
+          <div className="tabs">
+            <button
+              className={`tab-btn ${tab === 'github' ? 'active' : ''}`}
+              onClick={() => setTab('github')}
+            >
+              GitHub URL
+            </button>
+            <button
+              className={`tab-btn ${tab === 'upload' ? 'active' : ''}`}
+              onClick={() => setTab('upload')}
+            >
+              Upload zip
+            </button>
+          </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <button
-          className="primary"
-          onClick={handleIndex}
-          disabled={loading}
-        >
-          {loading ? 'Indexing...' : 'Index repository'}
-        </button>
-        {!loading && (
-          <span style={{ fontSize: 12, color: '#9b9a95' }}>
-            ~30s for avg repo
-          </span>
-        )}
-        {loading && (
-          <span style={{ fontSize: 13, color: '#6b6a65' }}>
-            Cloning and indexing repository...
-          </span>
-        )}
-      </div>
+          {tab === 'github' ? (
+            <input
+              type="text"
+              placeholder="https://github.com/username/repo"
+              value={githubUrl}
+              onChange={e => setGithubUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleIndex()}
+              autoFocus
+            />
+          ) : (
+            <div className="file-drop">
+              <input
+                type="file"
+                accept=".zip"
+                onChange={e => setFile(e.target.files[0])}
+              />
+              {file ? (
+                <span className="file-selected">{file.name}</span>
+              ) : (
+                <span>drop a zip file or click to browse</span>
+              )}
+            </div>
+          )}
 
-      {error && (
-        <p style={{ fontSize: 13, color: '#A32D2D', marginTop: 8 }}>
-          {error}
-        </p>
+          <div className="index-actions">
+            <button className="btn-primary" onClick={handleIndex} disabled={loading}>
+              Index repository
+            </button>
+            <span className="hint">~30s for an average repo</span>
+          </div>
+
+          {error && <p className="error-msg">{error}</p>}
+        </div>
       )}
     </div>
   );

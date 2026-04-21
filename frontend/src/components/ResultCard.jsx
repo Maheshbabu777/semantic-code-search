@@ -1,62 +1,28 @@
-export default function ResultCard({ result }) {
-  const filename = result.filepath.split('/').pop();
-  const folder = result.filepath.split('/').slice(-3, -1).join('/');
+export default function ResultCard({ result, index }) {
+  const parts = result.filepath.replace(/\\/g, '/').split('/');
+  const filename = parts.pop();
+  const folder = parts.slice(-2).join('/');
+
+  function scoreClass(score) {
+    if (score >= 0.5) return 'score-high';
+    if (score >= 0.25) return 'score-mid';
+    return 'score-low';
+  }
 
   return (
-    <div style={{
-      background: '#fafaf8',
-      border: '0.5px solid #e0dfd8',
-      borderRadius: 10,
-      padding: 16,
-      marginBottom: 12,
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        marginBottom: 10,
-        flexWrap: 'wrap',
-      }}>
-        <span style={{
-          background: '#E1F5EE',
-          color: '#0F6E56',
-          fontSize: 12,
-          fontWeight: 600,
-          padding: '2px 8px',
-          borderRadius: 4,
-        }}>
-          score {result.score}
+    <div className="result-card" style={{ animationDelay: `${index * 0.06}s` }}>
+      <div className="result-meta">
+        <span className={`badge-score ${scoreClass(result.score)}`}>
+          {result.score.toFixed(4)}
         </span>
-        <span style={{
-          background: 'white',
-          border: '0.5px solid #d0cec7',
-          color: '#6b6a65',
-          fontSize: 12,
-          padding: '2px 8px',
-          borderRadius: 4,
-        }}>
-          lines {result.start_line}–{result.end_line}
+        <span className="badge-lines">
+          {result.start_line}–{result.end_line}
         </span>
-        <span style={{ fontSize: 12, color: '#9b9a95', fontFamily: 'monospace' }}>
-          {folder}/{filename}
+        <span className="filepath">
+          <span>{folder}/</span>{filename}
         </span>
       </div>
-
-      <pre style={{
-        background: 'white',
-        border: '0.5px solid #e0dfd8',
-        borderRadius: 6,
-        padding: '10px 14px',
-        fontSize: 12,
-        overflowX: 'auto',
-        whiteSpace: 'pre',
-        lineHeight: 1.6,
-        margin: 0,
-        maxHeight: 200,
-        overflowY: 'auto',
-      }}>
-        <code>{result.code}</code>
-      </pre>
+      <pre className="code-block"><code>{result.code}</code></pre>
     </div>
   );
 }
