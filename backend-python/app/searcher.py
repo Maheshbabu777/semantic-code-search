@@ -1,8 +1,6 @@
-import chromadb
 from app.embeddings import get_embedding
 import app.state as state
-
-client = chromadb.PersistentClient(path="./chroma_db")
+from app.db import client
 
 MIN_SCORE = 0.2
 

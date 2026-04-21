@@ -1,11 +1,8 @@
 import os
 import hashlib
-import chromadb
 from app.chunker import chunk_file
 from app.embeddings import get_embeddings_batch
-
-CHROMA_PATH=os.getenv("CHROMA_PATH", "./chroma_db")
-client = chromadb.PersistentClient(path=CHROMA_PATH)
+from app.db import client
 
 SUPPORTED_EXTENSIONS = {
     ".js", ".jsx", ".ts", ".tsx",

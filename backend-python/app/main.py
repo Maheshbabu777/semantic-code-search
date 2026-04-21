@@ -6,21 +6,29 @@ from app.routes.search import router as search_router
 from app.routes.upload import router as upload_router
 from app.routes.sessions import router as session_router
 from app.github import cleanup_repo
-from app.indexer import client
+from app.db import client
 import app.state as state
 from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    existing = [c.name for c in client.list_collections()]
-    active = [f"code_{sid}" for sid in state.sessions]
-    for name in existing:
-        if name not in active:
+    existing = {c.name for c in client.list_collections()}
+    active = {f"code_{sid}" for sid in state.sessions}
+    stale = existing - active
+    for name in stale:
+        try:
             client.delete_collection(name)
+        except Exception:
+            pass
     yield
-    for session in state.sessions.values():
+    for session_id, session in list(state.sessions.items()):
         cleanup_repo(session["session_folder"])
-    print(f"Cleaned up {len(state.sessions)} sessions")
+        try:
+            client.delete_collection(f"code_{session_id}")
+        except Exception:
+            pass
+        del state.sessions[session_id]
+    print("Cleaned up all sessions and collections on shutdown.")
 
 app = FastAPI(title="Semantic Code Search - Python API", lifespan=lifespan)
 

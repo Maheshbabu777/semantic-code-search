@@ -5,31 +5,33 @@ import ResultCard from '../components/ResultCard';
 
 export default function SearchPage() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
+  const [query, setQuery]     = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]     = useState('');
   const [searched, setSearched] = useState(false);
 
-  const sessionId = localStorage.getItem('session_id');
+  const sessionId    = localStorage.getItem('session_id');
   const indexedCount = localStorage.getItem('indexed_count');
 
   useEffect(() => {
     if (!sessionId) navigate('/');
   }, [sessionId, navigate]);
 
-useEffect(() => {
-  function handleUnload() {
-    if (sessionId) {
-      fetch(`http://localhost:8000/session/${sessionId}`, {
-        method: 'DELETE',
-        keepalive: true,
-      }).catch(() => {});
+  useEffect(() => {
+    function handleUnload() {
+      if (!sessionId) return;
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('DELETE', `http://localhost:8000/session/${sessionId}`, false); 
+        xhr.send();
+      } catch (_) {
+      }
     }
-  }
-  window.addEventListener('beforeunload', handleUnload);
-  return () => window.removeEventListener('beforeunload', handleUnload);
-}, [sessionId]);
+
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [sessionId]);
 
   async function handleSearch() {
     if (!query.trim() || loading) return;
