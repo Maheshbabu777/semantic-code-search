@@ -14,6 +14,28 @@ SUPPORTED_EXTENSIONS = {
     ".sh"
 }
 
+SKIP_DIRS = {
+    "node_modules", ".git", "__pycache__",
+    "dist", "build", ".next", "venv",
+    "tests", "test", "__tests__",
+    "docs", "doc", "examples", "demo"
+}
+
+SKIP_FILE_PATTERNS = (
+    "test_", "spec_"
+)
+
+SKIP_FILE_SUFFIXES = (
+    "_test.py", "_spec.py",
+    ".test.js", ".spec.js",
+    ".test.ts", ".spec.ts"
+)
+
+def should_skip_file(filename: str) -> bool:
+    return (
+        any(filename.startswith(p) for p in SKIP_FILE_PATTERNS) or
+        any(filename.endswith(s) for s in SKIP_FILE_SUFFIXES)
+    )
 def get_collection(session_id: str):
     return client.get_or_create_collection(name=f"code_{session_id}")
 
@@ -26,11 +48,10 @@ def index_codebase(folder_path: str, session_id: str) -> dict:
     all_chunks = []
 
     for root, dirs, files in os.walk(folder_path):
-        dirs[:] = [d for d in dirs if d not in {
-            "node_modules", ".git", "__pycache__",
-            "dist", "build", ".next", "venv"
-        }]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for file in files:
+            if should_skip_file(file):
+                continue
             ext = os.path.splitext(file)[1]
             if ext in SUPPORTED_EXTENSIONS:
                 filepath = os.path.join(root, file)

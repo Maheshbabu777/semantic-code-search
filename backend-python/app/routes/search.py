@@ -7,7 +7,7 @@ router = APIRouter()
 class SearchRequest(BaseModel):
     query: str
     session_id: str
-    top_k: int = 5
+    top_k: int = 10
 
 @router.post("/")
 def search(req: SearchRequest):

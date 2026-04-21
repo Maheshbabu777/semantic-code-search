@@ -18,15 +18,18 @@ export default function SearchPage() {
     if (!sessionId) navigate('/');
   }, [sessionId, navigate]);
 
-  useEffect(() => {
-    function handleUnload() {
-      if (sessionId) {
-        navigator.sendBeacon(`http://localhost:8000/session/${sessionId}`);
-      }
+useEffect(() => {
+  function handleUnload() {
+    if (sessionId) {
+      fetch(`http://localhost:8000/session/${sessionId}`, {
+        method: 'DELETE',
+        keepalive: true,
+      }).catch(() => {});
     }
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
-  }, [sessionId]);
+  }
+  window.addEventListener('beforeunload', handleUnload);
+  return () => window.removeEventListener('beforeunload', handleUnload);
+}, [sessionId]);
 
   async function handleSearch() {
     if (!query.trim() || loading) return;

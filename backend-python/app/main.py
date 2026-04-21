@@ -6,11 +6,17 @@ from app.routes.search import router as search_router
 from app.routes.upload import router as upload_router
 from app.routes.sessions import router as session_router
 from app.github import cleanup_repo
+from app.indexer import client
 import app.state as state
 from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    existing = [c.name for c in client.list_collections()]
+    active = [f"code_{sid}" for sid in state.sessions]
+    for name in existing:
+        if name not in active:
+            client.delete_collection(name)
     yield
     for session in state.sessions.values():
         cleanup_repo(session["session_folder"])
