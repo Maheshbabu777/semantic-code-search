@@ -16,6 +16,17 @@ backend-node/npm-debug.log*
 backend-node/yarn-error.log*
 
 # =========================
+# NODE (all folders, recursive)
+# =========================
+**/node_modules/
+**/dist/
+**/build/
+**/.vite/
+**/.npm/
+**/.pnpm-store/
+**/.yarn/
+
+# =========================
 # PYTHON (backend-python)
 # =========================
 backend-python/__pycache__/
@@ -97,3 +108,20 @@ frontend/node_modules/
 frontend/dist/
 frontend/build/
 frontend/.env
+
+# =========================
+# JS/TS TEST & COVERAGE
+# =========================
+**/coverage/
+**/.nyc_output/
+**/*.tsbuildinfo
+
+# =========================
+# PYTHON TOOLING / NOTEBOOKS
+# =========================
+**/.ipynb_checkpoints/
+**/.ruff_cache/
+**/.tox/
+**/.nox/
+**/.coverage
+**/htmlcov/
