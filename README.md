@@ -15,10 +15,12 @@ Most code search tools only match exact strings. This engine understands **meani
 
 Search `"function that finds a pattern in text"` and it returns your KMP and Boyer-Moore implementations — even though those exact words don't appear in the code.
 
-It combines two complementary approaches:
+It uses a **two-stage retrieve-then-rerank pipeline**:
 
-- **Exact search** — KMP and Boyer-Moore string algorithms for precise pattern matching with line and column resolution
-- **Semantic search** — `st-codesearch-distilroberta-base` embeddings stored in ChromaDB for natural language → code retrieval
+- **Stage 1 — Bi-encoder retrieval** — `st-codesearch-distilroberta-base` embeds the query and retrieves the top 20 candidates from ChromaDB using approximate nearest neighbor search. Fast but shallow.
+- **Stage 2 — Cross-encoder re-ranking** — `ms-marco-MiniLM-L-6-v2` reads the query and each candidate chunk together to produce a true relevance score. Slower but dramatically more accurate — captures interactions between query and code that bi-encoders miss.
+
+Combined with keyword overlap scoring and dynamic thresholding, this produces production-grade retrieval quality on a fully local setup.
 
 ---
 
@@ -27,13 +29,19 @@ It combines two complementary approaches:
 ```
 User
  │
- ├── GitHub URL  →  POST /index  →  git clone → chunk → embed → ChromaDB
- └── zip upload  →  POST /upload →  extract   → chunk → embed → ChromaDB
-                                                                      │
-                                                               session_id returned
-                                                                      │
- User searches  →  POST /search  →  embed query → ChromaDB similarity → top-k results
-                                                   (session-scoped collection)
+ ├── GitHub URL  →  POST /index  →  git clone → chunk → enrich → embed → ChromaDB
+ └── zip upload  →  POST /upload →  extract   → chunk → enrich → embed → ChromaDB
+                                                                               │
+                                                                        session_id returned
+                                                                               │
+ User searches  →  POST /search
+                       │
+                       ├── 1. enrich query
+                       ├── 2. bi-encoder → top 20 candidates from ChromaDB
+                       ├── 3. hybrid score (semantic 0.75 + keyword 0.25)
+                       ├── 4. dynamic threshold filter
+                       ├── 5. cross-encoder re-rank → top 5
+                       └── results returned with filepath + line numbers
 
 Node.js service (port 3001)
  └── POST /search  →  KMP / Boyer-Moore exact match → line + column positions
@@ -49,19 +57,26 @@ Every user gets a unique `session_id` on indexing. All searches are scoped to th
 |---|---|
 | Exact search | Node.js, Express, ESM |
 | Semantic search | Python 3.10, FastAPI, uvicorn |
-| Embedding model | `flax-sentence-embeddings/st-codesearch-distilroberta-base` |
+| Bi-encoder model | `flax-sentence-embeddings/st-codesearch-distilroberta-base` |
+| Re-ranking model | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | Vector store | ChromaDB (persistent, session-scoped) |
 | Frontend | React 19, Vite, React Router, Axios |
 | Testing | Vitest (Node.js) |
 | Dev tooling | nodemon, conda |
 
-### Why this embedding model
+### Model choices
 
-`st-codesearch-distilroberta-base` was trained on the **CodeSearchNet dataset** — natural language descriptions paired with code functions from GitHub. Purpose-built for natural language → code retrieval. Evaluated and chosen over:
+**Bi-encoder — `st-codesearch-distilroberta-base`**
+
+Trained on the **CodeSearchNet dataset** — natural language descriptions paired with code functions from GitHub. Purpose-built for natural language → code retrieval. Evaluated and chosen over:
 
 - `mDeBERTa-v3-base` — multilingual overhead is irrelevant since all code is written in English regardless of developer background
 - `codebert-base` — no pooling layer baked in, heavier at ~500MB
 - `bge-small-en-v1.5` — trained on general English text, weak on code semantics
+
+**Cross-encoder — `ms-marco-MiniLM-L-6-v2`**
+
+Reads query and code chunk together rather than encoding independently. This joint reading captures relevance signals that bi-encoders miss — a chunk containing the right function but with low keyword overlap will still rank correctly. At ~80MB it runs on CPU without meaningful latency impact on a 20-candidate set.
 
 ---
 
@@ -89,9 +104,10 @@ semantic-code-search/
 │   │   ├── db.py                   ← Single shared ChromaDB PersistentClient
 │   │   ├── state.py                ← In-memory session store
 │   │   ├── embeddings.py           ← Model loading + single/batch inference
-│   │   ├── chunker.py              ← Function-level chunker + line-based fallback
-│   │   ├── indexer.py              ← File walker, skip lists, batch embed, upsert
-│   │   ├── searcher.py             ← Query embed + ChromaDB similarity query
+│   │   ├── reranker.py             ← Cross-encoder re-ranking (ms-marco-MiniLM)
+│   │   ├── chunker.py              ← Function-level chunker + 15-line fallback
+│   │   ├── indexer.py              ← File walker, skip lists, enrichment, batch embed
+│   │   ├── searcher.py             ← Two-stage pipeline: retrieve → hybrid score → rerank
 │   │   ├── github.py               ← Git clone (depth=1) + temp folder cleanup
 │   │   ├── uploader.py             ← Zip extraction to temp folder
 │   │   └── routes/
@@ -109,7 +125,7 @@ semantic-code-search/
 │   │   ├── App.jsx                 ← React Router setup
 │   │   ├── index.css               ← Design system (DM Sans + DM Mono, dark theme)
 │   │   ├── api/
-│   │   │   └── client.js           ← All API calls (indexRepo, uploadZip, searchCode, deleteSession)
+│   │   │   └── client.js           ← All API calls
 │   │   ├── pages/
 │   │   │   ├── IndexPage.jsx       ← GitHub URL + zip upload + animated loading
 │   │   │   └── SearchPage.jsx      ← Search bar + results + session exit
@@ -166,7 +182,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-First run downloads the embedding model (~250MB). Cached after that — subsequent starts are fast.
+First run downloads both models (~330MB total). Cached after that — subsequent starts are fast.
 
 ### 5. Start the frontend
 
@@ -212,12 +228,12 @@ file: project.zip
 Returns same shape as `/index` with `source` instead of `github_url`.
 
 #### `POST /search`
-Search the indexed codebase with a natural language query.
+Search the indexed codebase.
 ```json
 {
   "query": "function that finds a pattern in text",
   "session_id": "uuid-from-index",
-  "top_k": 10
+  "top_k": 5
 }
 ```
 Returns:
@@ -236,10 +252,10 @@ Returns:
 }
 ```
 
-Results are filtered by a minimum score threshold of `0.2` — anything below is treated as noise and excluded.
+Scores reflect the cross-encoder relevance judgment, not raw cosine similarity.
 
 #### `DELETE /session/{session_id}`
-Explicitly close a session. Deletes the ChromaDB collection and cleans up the temp folder.
+Close a session. Deletes the ChromaDB collection and temp folder.
 ```json
 { "deleted": "uuid-here" }
 ```
@@ -283,14 +299,58 @@ Returns:
 
 ---
 
-## How chunking works
+## How the retrieval pipeline works
+
+### Chunking
 
 Files are split at function boundaries using regex that detects:
 
 - Python: `def`, `async def`
 - JavaScript/TypeScript: `function`, `const`, `let`, `var` assignments
 
-Files with no detected function boundaries fall back to fixed 25-line chunks so no file is silently skipped.
+Files with no detected boundaries fall back to 15-line chunks so no file is silently skipped.
+
+### Chunk enrichment
+
+Before embedding, every chunk is enriched with file context:
+
+```
+File: kmp.js
+Code:
+function kmpSearch(text, pattern) { ... }
+```
+
+This aligns the chunk format with how the model was trained — on natural language + code pairs — improving semantic matching quality.
+
+### Query enrichment
+
+Queries are prefixed before embedding:
+
+```
+Search for code that: function that finds a pattern in text
+```
+
+### Hybrid scoring (Stage 1)
+
+Initial candidates are scored using:
+
+```
+combined_score = 0.75 × semantic_score + 0.25 × keyword_overlap
+```
+
+Keyword overlap captures exact identifier matches that embedding similarity may underweight.
+
+### Dynamic thresholding
+
+Rather than a fixed cutoff, the threshold adapts to each query's score distribution:
+
+```
+threshold = max(0.2, 0.5 × max_score)
+```
+
+### Cross-encoder re-ranking (Stage 2)
+
+Filtered candidates are passed as `[query, code]` pairs to the cross-encoder. It scores each pair jointly — reading query and code together — then returns the top-k by relevance score.
 
 ### Skipped directories
 
@@ -301,7 +361,9 @@ tests  test  __tests__  docs  doc  examples  demo
 
 ### Skipped file patterns
 
-Files matching `test_*`, `spec_*`, `*_test.py`, `*_spec.py`, `*.test.js`, `*.spec.js`, `*.test.ts`, `*.spec.ts` are excluded from indexing. Test files contain high keyword overlap with source queries and pollute semantic search results.
+`test_*`, `spec_*`, `*_test.py`, `*_spec.py`, `*.test.js`, `*.spec.js`, `*.test.ts`, `*.spec.ts`
+
+Test files contain high keyword overlap with source queries and pollute results without contributing useful retrievals.
 
 ---
 
@@ -311,14 +373,14 @@ Files matching `test_*`, `spec_*`, `*_test.py`, `*_spec.py`, `*.test.js`, `*.spe
 POST /index or /upload
   → uuid4 session_id generated
   → repo cloned / zip extracted to /tmp/codesearch_{id}
-  → files chunked, embedded in batch, upserted to ChromaDB
+  → files chunked, enriched, embedded in batch, upserted to ChromaDB
   → collection: code_{session_id}
   → session stored in state.sessions
 
 POST /search
-  → session_id validated against state.sessions
-  → query embedded → ChromaDB queries code_{session_id} only
-  → results filtered by score >= 0.2
+  → session_id validated
+  → two-stage retrieval: bi-encoder → hybrid score → cross-encoder
+  → top-k results returned
 
 DELETE /session/{session_id}
   → ChromaDB collection deleted
@@ -332,14 +394,14 @@ Server shutdown
   → all remaining temp folders cleaned up
 ```
 
-Sessions are in-memory. A server restart requires re-indexing. Redis persistence is a planned improvement.
+Sessions are in-memory. A server restart requires re-indexing.
 
 ---
 
 ## Known limitations
 
 - **In-memory sessions** — server restart wipes all sessions, users must re-index
-- **Concurrent writes** — ChromaDB `PersistentClient` is not safe for parallel indexing requests; concurrent users indexing simultaneously may cause write conflicts
+- **Single-process ChromaDB** — `PersistentClient` is not safe for parallel write requests; concurrent indexing may cause conflicts
 - **Blocking indexing** — indexing runs on the request thread; large repos hold the connection open until complete
 - **No rate limiting** — repeated indexing requests can exhaust disk and memory
 - **Regex-based chunker** — complex anonymous functions, decorators, or deeply nested closures may not chunk correctly
@@ -355,11 +417,12 @@ Sessions are in-memory. A server restart requires re-indexing. Redis persistence
 - [x] Zip upload indexing — multipart, extraction, same pipeline
 - [x] Session isolation — uuid4 per user, isolated ChromaDB collections
 - [x] Test file filtering — excluded from indexing to reduce noise
-- [x] Score threshold — results below 0.2 filtered before returning
+- [x] Chunk and query enrichment — file context prefix improves alignment
+- [x] Hybrid scoring — semantic + keyword overlap combined score
+- [x] Dynamic thresholding — adapts cutoff to each query's score distribution
+- [x] Cross-encoder re-ranking — two-stage retrieve-then-rerank pipeline
 - [x] Orphan cleanup — stale collections deleted on server startup
 - [x] React frontend — dark theme, animated loading, search + results
-- [ ] Hybrid search router — auto-route exact pattern vs semantic queries
-- [ ] Background indexing — move to FastAPI `BackgroundTasks` with status endpoint
 - [ ] Docker Compose — single command to start all three services
 - [ ] Deploy — HuggingFace Spaces (Python) + Vercel (frontend)
 - [ ] AI/RAG layer — LLM explains returned code chunks and answers follow-ups
