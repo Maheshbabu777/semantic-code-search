@@ -41,7 +41,7 @@ def chunk_file(filepath: str) -> list[dict]:
         )
 
     if not chunks:
-        chunk_size = 25
+        chunk_size = 15
         for i in range(0, len(lines), chunk_size):
             chunk = lines[i : i + chunk_size]
             chunks.append(

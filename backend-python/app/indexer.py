@@ -28,6 +28,10 @@ SKIP_FILE_SUFFIXES = (
     ".test.ts", ".spec.ts"
 )
 
+def enrich_chunk(chunk: dict) -> dict:
+    filename = os.path.basename(chunk["filepath"])
+    return f"File: {filename}\nCode:\n{chunk['code']}"
+
 def should_skip_file(filename: str) -> bool:
     return (
         any(filename.startswith(p) for p in SKIP_FILE_PATTERNS) or
@@ -63,7 +67,7 @@ def index_codebase(folder_path: str, session_id: str) -> dict:
         raise ValueError(f"Codebase too large: {len(all_chunks)}, "
                          f"limit is {MAX_CHUNKS}. Index them in smaller parts.")
 
-    codes = [chunk["code"] for chunk in all_chunks]
+    codes = [enrich_chunk(chunk) for chunk in all_chunks]
     embeddings = get_embeddings_batch(codes)
 
     ids = [
