@@ -42,7 +42,7 @@ def search_code(query: str, session_id: str, k:int = 5) -> list[dict]:
         })
 
     if candidates:
-        max_score = max(c["score"] for c in candidates)
+        max_score = max(0.0, max(c["score"] for c in candidates))
         candidates = [c for c in candidates if c["score"] >= 0.5 * max_score]
     
     reranked = rerank(query, candidates, k_top=k)

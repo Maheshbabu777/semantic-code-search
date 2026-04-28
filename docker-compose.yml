@@ -1,0 +1,39 @@
+services:
+
+  backend-python:
+    build:
+      context: ./backend-python
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend-python:/app
+      - chroma-data:/app/chroma_db
+      - huggingface-cache:/root/.cache/huggingface
+    env_file:
+      - ./backend-python/.env
+    environment:
+      - CHROMA_PATH=/app/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    depends_on:
+      backend-python:
+        condition: service_healthy
+
+volumes:
+  chroma-data:
+  huggingface-cache:

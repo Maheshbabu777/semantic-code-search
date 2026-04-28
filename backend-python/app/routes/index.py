@@ -2,37 +2,40 @@ import uuid
 import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.github import clone_repo, cleanup_repo
+from app.github import clone_repo
 from app.indexer import index_codebase
+from app.session_store import save_session
 import app.state as state
 
 router = APIRouter()
 
+
 class IndexRequest(BaseModel):
     github_url: str
+
 
 @router.post("/")
 def index(req: IndexRequest):
     try:
         session_id = str(uuid.uuid4())
-
         tmp_dir = clone_repo(req.github_url)
-
         result = index_codebase(tmp_dir, session_id)
-        state.sessions[session_id] = {
-            "collection_id": session_id,
+
+        session_data = {
+            "collection_id":  f"code_{session_id}",
             "session_folder": tmp_dir,
-            "github_url": req.github_url,
-            "created_at": time.time()
+            "github_url":     req.github_url,
+            "created_at":     time.time(),
         }
+        save_session(session_id, session_data)
+        state.sessions[session_id] = session_data
 
         return {
             **result,
-            "session_id":session_id,
-            "github_url": req.github_url
+            "session_id": session_id,
+            "github_url": req.github_url,
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-    

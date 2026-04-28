@@ -125,3 +125,63 @@ frontend/.env
 **/.nox/
 **/.coverage
 **/htmlcov/
+
+# =========================
+# DATABASE
+# =========================
+backend-python/sessions.db
+backend-python/sessions.db-shm
+backend-python/sessions.db-wal
+
+# =========================
+# EXTRACTED/CLONED REPOS
+# =========================
+backend-python/repos/
+backend-python/extracted/
+backend-python/downloads/
+
+# =========================
+# FRONTEND ENV FILES
+# =========================
+frontend/.env.local
+frontend/.env.*.local
+
+# =========================
+# OS GENERATED FILES
+# =========================
+*.swp
+*.swo
+*~
+.swp
+.swo
+
+# =========================
+# EDITOR BACKUP FILES
+# =========================
+*.sublime-workspace
+*.sublime-project
+*.code-workspace
+
+# =========================
+# PYTHON POETRY / PIP
+# =========================
+backend-python/poetry.lock
+backend-python/Pipfile.lock
+backend-python/dist/
+backend-python/build/
+
+# =========================
+# DOCKER
+# =========================
+.dockerignore
+docker-compose.override.yml
+.docker/
+docker-build/
+*.dockerfile
+.dockercfg
+.docker/config.json
+
+# =========================
+# VITE BUILD CACHE
+# =========================
+frontend/.vite/

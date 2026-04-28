@@ -5,10 +5,10 @@ import ResultCard from '../components/ResultCard';
 
 export default function SearchPage() {
   const navigate = useNavigate();
-  const [query, setQuery]     = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
+  const [query, setQuery]       = useState('');
+  const [results, setResults]   = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
   const [searched, setSearched] = useState(false);
 
   const sessionId    = localStorage.getItem('session_id');
@@ -19,14 +19,14 @@ export default function SearchPage() {
   }, [sessionId, navigate]);
 
   useEffect(() => {
+    if (!sessionId) return;
+
     function handleUnload() {
-      if (!sessionId) return;
-      try {
-        const xhr = new XMLHttpRequest();
-        xhr.open('DELETE', `http://localhost:8000/session/${sessionId}`, false); 
-        xhr.send();
-      } catch (_) {
-      }
+      fetch(`http://localhost:8000/session/${sessionId}`, {
+        method:    'DELETE',
+        keepalive: true,
+      }).catch(() => {
+      });
     }
 
     window.addEventListener('beforeunload', handleUnload);
@@ -103,11 +103,11 @@ export default function SearchPage() {
       {results.length > 0 && (
         <>
           <p style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-dim)',
-            fontFamily: 'var(--font-mono)',
+            fontSize:    '0.75rem',
+            color:       'var(--text-dim)',
+            fontFamily:  'var(--font-mono)',
             marginBottom: 16,
-            fontStyle: 'italic',
+            fontStyle:   'italic',
           }}>
             {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
           </p>
