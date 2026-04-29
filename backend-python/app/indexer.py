@@ -5,38 +5,57 @@ from app.embeddings import get_embeddings_batch
 from app.db import client
 
 SUPPORTED_EXTENSIONS = {
-    ".js", ".jsx", ".ts", ".tsx",
-    ".py", ".java", ".go", ".rb", ".php", ".rs",
-    ".c", ".cpp", ".cs", ".h", ".swift",
-    ".sh"
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".py",
+    ".java",
+    ".go",
+    ".rb",
+    ".php",
+    ".rs",
+    ".c",
+    ".cpp",
+    ".cs",
+    ".h",
+    ".swift",
+    ".sh",
 }
 
 SKIP_DIRS = {
-    "node_modules", ".git", "__pycache__",
-    "dist", "build", ".next", "venv",
-    "tests", "test", "__tests__",
-    "docs", "doc", "examples", "demo"
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "dist",
+    "build",
+    ".next",
+    "venv",
+    "tests",
+    "test",
+    "__tests__",
+    "docs",
+    "doc",
+    "examples",
+    "demo",
 }
 
-SKIP_FILE_PATTERNS = (
-    "test_", "spec_"
-)
+SKIP_FILE_PATTERNS = ("test_", "spec_")
 
 SKIP_FILE_SUFFIXES = (
-    "_test.py", "_spec.py",
-    ".test.js", ".spec.js",
-    ".test.ts", ".spec.ts"
+    "_test.py",
+    "_spec.py",
+    ".test.js",
+    ".spec.js",
+    ".test.ts",
+    ".spec.ts",
 )
 
-def enrich_chunk(chunk: dict) -> dict:
-    filename = os.path.basename(chunk["filepath"])
-    return f"File: {filename}\nCode:\n{chunk['code']}"
-
 def should_skip_file(filename: str) -> bool:
-    return (
-        any(filename.startswith(p) for p in SKIP_FILE_PATTERNS) or
-        any(filename.endswith(s) for s in SKIP_FILE_SUFFIXES)
+    return any(filename.startswith(p) for p in SKIP_FILE_PATTERNS) or any(
+        filename.endswith(s) for s in SKIP_FILE_SUFFIXES
     )
+
 def get_collection(session_id: str):
     return client.get_or_create_collection(name=f"code_{session_id}")
 
@@ -60,14 +79,16 @@ def index_codebase(folder_path: str, session_id: str) -> dict:
                 all_chunks.extend(chunks)
 
     if not all_chunks:
-        return { "indexed": 0, "message": "No supported files found." }
-    
+        return {"indexed": 0, "message": "No supported files found."}
+
     MAX_CHUNKS = 2000
     if len(all_chunks) > MAX_CHUNKS:
-        raise ValueError(f"Codebase too large: {len(all_chunks)}, "
-                         f"limit is {MAX_CHUNKS}. Index them in smaller parts.")
+        raise ValueError(
+            f"Codebase too large: {len(all_chunks)}, "
+            f"limit is {MAX_CHUNKS}. Index them in smaller parts."
+        )
 
-    codes = [enrich_chunk(chunk) for chunk in all_chunks]
+    codes = [chunk["code"] for chunk in all_chunks]
     embeddings = get_embeddings_batch(codes)
 
     ids = [
@@ -79,11 +100,14 @@ def index_codebase(folder_path: str, session_id: str) -> dict:
         ids=ids,
         embeddings=embeddings,
         documents=codes,
-        metadatas=[{
-            "filepath": chunk["filepath"],
-            "start_line": chunk["start_line"],
-            "end_line": chunk["end_line"]
-        } for chunk in all_chunks]
+        metadatas=[
+            {
+                "filepath": chunk["filepath"],
+                "start_line": chunk["start_line"],
+                "end_line": chunk["end_line"],
+            }
+            for chunk in all_chunks
+        ],
     )
 
-    return { "indexed": len(all_chunks) }
+    return {"indexed": len(all_chunks)}
