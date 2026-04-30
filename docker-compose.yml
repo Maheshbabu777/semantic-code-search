@@ -3,7 +3,7 @@ services:
   backend-python:
     build:
       context: ./backend-python
-      dockerfile: Dockerfile
+      dockerfile: DockerFile
     ports:
       - "8000:8000"
     volumes:
@@ -18,21 +18,15 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 90s
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: DockerFile
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/index.html:/app/index.html
+      - "80:80"
     depends_on:
-      backend-python:
-        condition: service_healthy
+      - backend-python
 
 volumes:
   chroma-data:

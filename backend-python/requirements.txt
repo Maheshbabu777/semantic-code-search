@@ -1,8 +1,8 @@
 fastapi
 uvicorn
 transformers
-torch
 sentence-transformers
 chromadb
 python-dotenv
 numpy
+python-multipart
