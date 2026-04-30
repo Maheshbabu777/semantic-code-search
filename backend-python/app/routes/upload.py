@@ -2,7 +2,8 @@ import time
 import uuid
 import os
 import tempfile
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
 from app.uploader import extract_upload
 from app.indexer import index_codebase
 from app.session_store import save_session
@@ -28,12 +29,11 @@ async def upload(file: UploadFile = File(...)):
         os.remove(tmp_zip)
 
         result = index_codebase(tmp_dir, session_id)
-
         session_data = {
-            "collection_id":  f"code_{session_id}",
+            "collection_id": f"code_{session_id}",
             "session_folder": tmp_dir,
-            "source":         file.filename,
-            "created_at":     time.time(),
+            "source": file.filename,
+            "created_at": time.time(),
         }
 
         save_session(session_id, session_data)
@@ -42,7 +42,22 @@ async def upload(file: UploadFile = File(...)):
         return {
             **result,
             "session_id": session_id,
-            "source":     file.filename,
+            "source": file.filename,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process upload: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process upload: {str(e)}"
+        )
+
+
+@router.post("/upload")
+async def upload_files(files: list[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    try:
+        result = await extract_upload(files)
+        return JSONResponse({"status": "success", "message": result})
+    except Exception as e:
+        print(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
