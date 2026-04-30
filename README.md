@@ -423,7 +423,7 @@ Sessions are in-memory. A server restart requires re-indexing.
 - [x] Cross-encoder re-ranking — two-stage retrieve-then-rerank pipeline
 - [x] Orphan cleanup — stale collections deleted on server startup
 - [x] React frontend — dark theme, animated loading, search + results
-- [ ] Docker Compose — single command to start all three services
+- [x] Docker Compose — single command to start all services
 - [ ] Deploy — HuggingFace Spaces (Python) + Vercel (frontend)
 - [ ] AI/RAG layer — LLM explains returned code chunks and answers follow-ups
 
