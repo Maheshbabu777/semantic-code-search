@@ -1,9 +1,8 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
+const API_BASE  = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const pythonApi = axios.create({ baseURL: API_BASE });
-const nodeApi = axios.create({ baseURL: 'http://localhost:3001' });
+const nodeApi   = axios.create({ baseURL: 'http://localhost:3001' });
 
 export async function indexRepo(githubUrl) {
   const res = await pythonApi.post('/index', { github_url: githubUrl });
@@ -29,7 +28,7 @@ export async function uploadFolder(files) {
   try {
     const response = await fetch(`${API_BASE}/upload`, {
       method: 'POST',
-      body: formData,
+      body:   formData,
     });
 
     if (!response.ok) {
@@ -47,7 +46,7 @@ export async function searchCode(query, sessionId, topK = 5) {
   const res = await pythonApi.post('/search', {
     query,
     session_id: sessionId,
-    top_k: topK,
+    top_k:      topK,
   });
   return res.data;
 }
