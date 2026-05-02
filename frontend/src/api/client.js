@@ -64,3 +64,23 @@ export async function deleteSession(sessionId) {
 export function isExactPattern(query) {
   return !query.trim().includes(' ') && query.trim().length < 40;
 }
+
+export async function chatStream({ message, sessionId, history, signal }) {
+  const res = await fetch('http://localhost:8000/chat/', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      history: history.map(m => ({ role: m.role, content: m.content })),
+    }),
+    signal,
+  });
+ 
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+ 
+  return res.body.getReader();
+}

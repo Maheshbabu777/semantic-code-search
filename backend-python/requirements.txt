@@ -6,3 +6,4 @@ chromadb
 python-dotenv
 numpy
 python-multipart
+groq

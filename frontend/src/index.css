@@ -42,7 +42,6 @@ body {
   padding: 64px 32px 96px;
 }
 
-/* ─── Typography ─── */
 h1 {
   font-size: clamp(2.2rem, 4vw, 3.2rem);
   font-weight: 300;
@@ -62,7 +61,6 @@ h1 span {
   font-weight: 400;
 }
 
-/* ─── Inputs ─── */
 input[type="text"] {
   font-family: var(--font-sans);
   font-size: 0.9375rem;
@@ -85,7 +83,6 @@ input[type="text"]:focus {
   background: var(--bg3);
 }
 
-/* ─── Tabs ─── */
 .tabs {
   display: flex;
   gap: 0;
@@ -119,7 +116,6 @@ input[type="text"]:focus {
   color: var(--text);
 }
 
-/* ─── Buttons ─── */
 .btn-primary {
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -185,7 +181,6 @@ input[type="text"]:focus {
   background: rgba(232, 160, 128, 0.06);
 }
 
-/* ─── File input ─── */
 .file-drop {
   width: 100%;
   padding: 28px 18px;
@@ -220,7 +215,6 @@ input[type="text"]:focus {
   color: var(--accent);
 }
 
-/* ─── Loading state ─── */
 .loading-wrap {
   display: flex;
   flex-direction: column;
@@ -284,7 +278,6 @@ input[type="text"]:focus {
   100% { width: 0%; margin-left: 100%; }
 }
 
-/* ─── Status pill ─── */
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -312,14 +305,12 @@ input[type="text"]:focus {
   50%       { opacity: 0.4; }
 }
 
-/* ─── Search bar ─── */
 .search-row {
   display: flex;
   gap: 10px;
   align-items: center;
 }
 
-/* ─── Result cards ─── */
 .result-card {
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -403,7 +394,6 @@ input[type="text"]:focus {
   white-space: pre;
 }
 
-/* ─── Header row ─── */
 .search-header {
   display: flex;
   align-items: center;
@@ -411,7 +401,6 @@ input[type="text"]:focus {
   margin-bottom: 28px;
 }
 
-/* ─── Error ─── */
 .error-msg {
   font-size: 0.8125rem;
   color: #e8a080;
@@ -419,7 +408,6 @@ input[type="text"]:focus {
   font-style: italic;
 }
 
-/* ─── Empty state ─── */
 .empty-state {
   text-align: center;
   padding: 60px 0;
@@ -428,7 +416,6 @@ input[type="text"]:focus {
   font-style: italic;
 }
 
-/* ─── Page fade in ─── */
 .page-enter {
   animation: pageIn 0.4s ease both;
 }
@@ -438,21 +425,18 @@ input[type="text"]:focus {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Divider ─── */
 .divider {
   border: none;
   border-top: 1px solid var(--border);
   margin: 28px 0;
 }
 
-/* ─── Hint text ─── */
 .hint {
   font-size: 0.8125rem;
   color: var(--text-dim);
   font-style: italic;
 }
 
-/* ─── Index page layout ─── */
 .index-header {
   margin-bottom: 48px;
 }
@@ -469,7 +453,44 @@ input[type="text"]:focus {
   gap: 16px;
 }
 
-/* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 4px; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.btn-stop {
+  font-family:  var(--font-sans);
+  font-size:    0.875rem;
+  font-weight:  500;
+  padding:      12px 28px;
+  background:   rgba(232, 160, 128, 0.15);
+  color:        var(--score-low);
+  border:       1px solid rgba(232, 160, 128, 0.3);
+  border-radius: 10px;
+  cursor:       pointer;
+  transition:   opacity 0.15s, transform 0.1s;
+  white-space:  nowrap;
+  letter-spacing: -0.01em;
+  flex-shrink:  0;
+}
+
+.btn-stop:hover {
+  opacity: 0.85;
+}
+
+.btn-stop:active {
+  transform: scale(0.98);
+}
+
+.chat-messages {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-messages::-webkit-scrollbar {
+  display: none;
+}

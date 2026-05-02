@@ -5,10 +5,10 @@ import ResultCard from '../components/ResultCard';
 
 export default function SearchPage() {
   const navigate = useNavigate();
-  const [query, setQuery]       = useState('');
-  const [results, setResults]   = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [query,   setQuery]   = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
   const [searched, setSearched] = useState(false);
 
   const sessionId    = localStorage.getItem('session_id');
@@ -25,8 +25,7 @@ export default function SearchPage() {
       fetch(`http://localhost:8000/session/${sessionId}`, {
         method:    'DELETE',
         keepalive: true,
-      }).catch(() => {
-      });
+      }).catch(() => {});
     }
 
     window.addEventListener('beforeunload', handleUnload);
@@ -63,9 +62,19 @@ export default function SearchPage() {
           <span className="status-dot" />
           {Number(indexedCount).toLocaleString()} chunks indexed
         </span>
-        <button className="btn-exit" onClick={handleExit}>
-          exit session
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            className="btn-ghost"
+            onClick={() => navigate('/chat')}
+            title="Switch to chat mode"
+          >
+            Chat
+          </button>
+          <button className="btn-exit" onClick={handleExit}>
+            exit session
+          </button>
+        </div>
       </div>
 
       <div className="search-row" style={{ marginBottom: 32 }}>
@@ -97,17 +106,19 @@ export default function SearchPage() {
       )}
 
       {searched && !loading && results.length === 0 && !error && (
-        <p className="empty-state">no results found — try rephrasing your query</p>
+        <p className="empty-state">
+          no results found — try rephrasing your query
+        </p>
       )}
 
       {results.length > 0 && (
         <>
           <p style={{
-            fontSize:    '0.75rem',
-            color:       'var(--text-dim)',
-            fontFamily:  'var(--font-mono)',
+            fontSize:     '0.75rem',
+            color:        'var(--text-dim)',
+            fontFamily:   'var(--font-mono)',
             marginBottom: 16,
-            fontStyle:   'italic',
+            fontStyle:    'italic',
           }}>
             {results.length} result{results.length !== 1 ? 's' : ''} for "{query}"
           </p>
