@@ -9,24 +9,24 @@ from groq import AsyncGroq, AuthenticationError, RateLimitError
 from app.searcher import search_code
 import app.state as state
 
-router = APIRouter()
+router      = APIRouter()
 groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
-MODEL = "llama-3.3-70b-versatile"
-MAX_TOKENS = 1024
+MODEL       = "llama-3.3-70b-versatile"
+MAX_TOKENS  = 1024
 MAX_HISTORY = 10
 MAX_MSG_LEN = 2000
 
 
 class HistoryMessage(BaseModel):
-    role: str
+    role:    str
     content: str
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message:    str
     session_id: str
-    history: list[HistoryMessage] = []
+    history:    list[HistoryMessage] = []
 
 
 def build_system_prompt(chunks: list[dict]) -> str:
@@ -55,10 +55,16 @@ USING CONTEXT:
   relevant parts of the codebase for the user's question.
 - If a chunk has already been discussed in the conversation, do NOT repeat it. Reference it 
   by filepath and line numbers instead: "as we saw in `src/auth/middleware.py` lines 23–45"
-- Always cite with full filepath and line numbers when referencing code: 
-  `src/auth/middleware.py` lines 23–45
+- Always cite chunks using [Chunk N] notation (e.g. [Chunk 1], [Chunk 2]) when referencing code.
 - Never invent code, functions, or behavior that isn't in the retrieved chunks or 
   the conversation history.
+
+MARKDOWN FORMATTING:
+- Use **bold** for emphasis and when mentioning function/variable names inline.
+- Use fenced code blocks (triple backticks) ONLY for multi-line code snippets — never for 
+  single identifiers or short expressions. Single identifiers should use **bold** instead.
+- Use numbered lists for step-by-step explanations.
+- Use bullet points for listing items.
 
 FOLLOW-UP AWARENESS:
 - Pay close attention to the conversation history. If the user says "this function" or 
@@ -75,19 +81,20 @@ RETRIEVED CODE CONTEXT:
 """
     context_blocks = []
     for idx, chunk in enumerate(chunks, start=1):
-        filepath = chunk["filepath"]
-        start = chunk["start_line"]
-        end = chunk["end_line"]
-        score = chunk["score"]
-        code = chunk["code"]
+        filepath   = chunk["filepath"]
+        start      = chunk["start_line"]
+        end        = chunk["end_line"]
+        score      = chunk["score"]
+        code       = chunk["code"]
 
-        parts = filepath.replace("\\", "/").split("/")
+        parts      = filepath.replace("\\", "/").split("/")
         short_path = "/".join(parts[-3:]) if len(parts) >= 3 else filepath
 
         context_blocks.append(
-            f"Chunk {idx} {short_path} (lines {start}-{end}, score: {score:.3f}):\n"
+            f"[Chunk {idx}] {short_path} (lines {start}–{end}, score: {score:.3f}):\n"
             f"```\n{code}\n```"
         )
+
     return rules + "\n\n".join(context_blocks)
 
 
@@ -97,25 +104,22 @@ def _sse(payload: dict) -> str:
 
 async def stream_response(req: ChatRequest):
     if req.session_id not in state.sessions:
-        yield _sse(
-            {
-                "type": "error",
-                "message": "Invalid or expired session. Please re-index your codebase.",
-            }
-        )
+        yield _sse({
+            "type":    "error",
+            "message": "Invalid or expired session. Please re-index your codebase.",
+        })
         return
 
     if len(req.message) > MAX_MSG_LEN:
-        yield _sse(
-            {
-                "type": "error",
-                "message": (
-                    f"Message too long — please keep questions "
-                    f"under {MAX_MSG_LEN} characters."
-                ),
-            }
-        )
+        yield _sse({
+            "type":    "error",
+            "message": (
+                f"Message too long — please keep questions "
+                f"under {MAX_MSG_LEN} characters."
+            ),
+        })
         return
+
     try:
         chunks = search_code(req.message, req.session_id, k=6)
     except ValueError as e:
@@ -126,33 +130,30 @@ async def stream_response(req: ChatRequest):
         return
 
     if not chunks:
-        yield _sse(
-            {
-                "type": "text",
-                "content": (
-                    "I couldn't find anything relevant in the indexed codebase "
-                    "for that question. Try asking about a specific function, "
-                    "file, or feature."
-                ),
-            }
-        )
+        yield _sse({
+            "type":    "text",
+            "content": (
+                "I couldn't find anything relevant in the indexed codebase "
+                "for that question. Try asking about a specific function, "
+                "file, or feature."
+            ),
+        })
         yield _sse({"type": "done"})
         return
 
-    yield _sse(
-        {
-            "type": "context",
-            "chunks": [
-                {
-                    "filepath": c["filepath"],
-                    "start_line": c["start_line"],
-                    "end_line": c["end_line"],
-                    "score": c["score"],
-                }
-                for c in chunks
-            ],
-        }
-    )
+    yield _sse({
+        "type":   "context",
+        "chunks": [
+            {
+                "filepath":   c["filepath"],
+                "start_line": c["start_line"],
+                "end_line":   c["end_line"],
+                "score":      c["score"],
+                "code":       c["code"],
+            }
+            for c in chunks
+        ],
+    })
 
     system_prompt = build_system_prompt(chunks)
     groq_messages = [
@@ -176,13 +177,17 @@ async def stream_response(req: ChatRequest):
                 yield _sse({"type": "text", "content": text})
 
         yield _sse({"type": "done"})
+
     except AuthenticationError:
-        yield _sse(
-            {
-                "type": "error",
-                "message": "Groq rate limit hit — wait a moment and try again.",
-            }
-        )
+        yield _sse({
+            "type":    "error",
+            "message": "GROQ_API_KEY is missing or invalid. Check your .env file.",
+        })
+    except RateLimitError:
+        yield _sse({
+            "type":    "error",
+            "message": "Groq rate limit hit — wait a moment and try again.",
+        })
     except Exception as e:
         yield _sse({"type": "error", "message": f"LLM error: {str(e)}"})
 
@@ -194,8 +199,8 @@ async def chat(req: ChatRequest):
         media_type="text/event-stream",
         headers={
             "X-Accel-Buffering": "no",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
+            "Cache-Control":     "no-cache",
+            "Connection":        "keep-alive",
             "Access-Control-Allow-Origin": "*",
         },
     )
