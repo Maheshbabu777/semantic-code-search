@@ -17,6 +17,22 @@ MAX_TOKENS  = 1024
 MAX_HISTORY = 10
 MAX_MSG_LEN = 2000
 
+BROAD_QUERIES = {
+    "what is this codebase about",
+    "what does this codebase do",
+    "what is this project",
+    "what does this project do",
+    "overview",
+    "summarize",
+    "explain this codebase",
+    "explain this project",
+    "what is this",
+    "tell me about this",
+    "all functions",
+    "list all functions",
+    "what functions are there",
+}
+
 
 class HistoryMessage(BaseModel):
     role:    str
@@ -120,8 +136,22 @@ async def stream_response(req: ChatRequest):
         })
         return
 
+    recent_user_messages = " ".join(
+        m.content for m in req.history[-3:]
+        if m.role == "user"
+    )
+    search_query = f"{recent_user_messages} {req.message}".strip() if recent_user_messages else req.message
+
+    normalized = req.message.strip().lower().rstrip("?.")
+    is_broad = normalized in BROAD_QUERIES or len(normalized.split()) <= 3
+
+    if is_broad:
+        search_query = "function class module route handler middleware model schema"
+
+    k = 12 if is_broad else 6
+
     try:
-        chunks = search_code(req.message, req.session_id, k=6)
+        chunks = search_code(search_query, req.session_id, k=k)
     except ValueError as e:
         yield _sse({"type": "error", "message": str(e)})
         return
@@ -133,9 +163,9 @@ async def stream_response(req: ChatRequest):
         yield _sse({
             "type":    "text",
             "content": (
-                "I couldn't find anything relevant in the indexed codebase "
-                "for that question. Try asking about a specific function, "
-                "file, or feature."
+                "I couldn't find specific code chunks for that query. "
+                "Try asking about a specific function, file, route, or feature — "
+                "for example: 'how does authentication work?' or 'explain the note routes'."
             ),
         })
         yield _sse({"type": "done"})

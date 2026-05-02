@@ -15,14 +15,14 @@ function renderInline(text, key) {
         if (part.startsWith('`') && part.endsWith('`')) {
           return (
             <code key={i} style={{
-              fontFamily:   'var(--font-mono)',
-              fontSize:     '0.8rem',
-              background:   'var(--bg3)',
-              border:       '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8rem',
+              background: 'var(--bg3)',
+              border: '1px solid var(--border)',
               borderRadius: 4,
-              padding:      '1px 6px',
-              color:        'var(--accent)',
-              whiteSpace:   'nowrap',
+              padding: '1px 6px',
+              color: 'var(--accent)',
+              whiteSpace: 'nowrap',
             }}>
               {part.slice(1, -1)}
             </code>
@@ -57,21 +57,48 @@ function renderContent(text) {
             return <div key={li} style={{ height: 6 }} />;
           }
 
+          const h3Match = line.match(/^###\s+(.*)/);
+          if (h3Match) {
+            return (
+              <div key={li} style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text)', margin: '10px 0 4px' }}>
+                {renderInline(h3Match[1], `h3-${li}`)}
+              </div>
+            );
+          }
+
+          const h2Match = line.match(/^##\s+(.*)/);
+          if (h2Match) {
+            return (
+              <div key={li} style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text)', margin: '12px 0 4px' }}>
+                {renderInline(h2Match[1], `h2-${li}`)}
+              </div>
+            );
+          }
+
+          const h1Match = line.match(/^#\s+(.*)/);
+          if (h1Match) {
+            return (
+              <div key={li} style={{ fontWeight: 600, fontSize: '1.0625rem', color: 'var(--text)', margin: '14px 0 4px' }}>
+                {renderInline(h1Match[1], `h1-${li}`)}
+              </div>
+            );
+          }
+
           const orderedMatch = line.match(/^(\d+)\.\s+(.*)/);
           if (orderedMatch) {
             return (
               <div key={li} style={{
-                display:      'flex',
-                gap:          8,
+                display: 'flex',
+                gap: 8,
                 marginBottom: 4,
-                paddingLeft:  4,
+                paddingLeft: 4,
               }}>
                 <span style={{
-                  color:      'var(--accent)',
+                  color: 'var(--accent)',
                   fontFamily: 'var(--font-mono)',
-                  fontSize:   '0.8125rem',
+                  fontSize: '0.8125rem',
                   flexShrink: 0,
-                  minWidth:   18,
+                  minWidth: 18,
                 }}>
                   {orderedMatch[1]}.
                 </span>
@@ -84,10 +111,10 @@ function renderContent(text) {
           if (bulletMatch) {
             return (
               <div key={li} style={{
-                display:      'flex',
-                gap:          8,
+                display: 'flex',
+                gap: 8,
                 marginBottom: 4,
-                paddingLeft:  4,
+                paddingLeft: 4,
               }}>
                 <span style={{ color: 'var(--accent)', flexShrink: 0 }}>·</span>
                 <span>{renderInline(bulletMatch[1], `ul-${li}`)}</span>
@@ -111,28 +138,28 @@ export default function ChatMessage({
   message,
   isStreaming,
   onChunkClick = null,
-  activeChunk  = null,
+  activeChunk = null,
 }) {
   const isUser = message.role === 'user';
 
   if (isUser) {
     return (
       <div style={{
-        display:        'flex',
+        display: 'flex',
         justifyContent: 'flex-end',
-        marginBottom:   16,
+        marginBottom: 16,
       }}>
         <div style={{
-          maxWidth:     '72%',
-          background:   'var(--accent-dim)',
-          border:       '1px solid var(--accent-border)',
+          maxWidth: '72%',
+          background: 'var(--accent-dim)',
+          border: '1px solid var(--accent-border)',
           borderRadius: '12px 12px 4px 12px',
-          padding:      '10px 14px',
-          fontSize:     '0.9375rem',
-          color:        'var(--text)',
-          lineHeight:   1.6,
-          whiteSpace:   'pre-wrap',
-          wordBreak:    'break-word',
+          padding: '10px 14px',
+          fontSize: '0.9375rem',
+          color: 'var(--text)',
+          lineHeight: 1.6,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
         }}>
           {message.content}
         </div>
@@ -143,10 +170,10 @@ export default function ChatMessage({
   return (
     <div style={{ marginBottom: 20 }}>
       <p style={{
-        fontSize:      '0.6875rem',
-        color:         'var(--text-dim)',
-        fontFamily:    'var(--font-mono)',
-        marginBottom:  6,
+        fontSize: '0.6875rem',
+        color: 'var(--text-dim)',
+        fontFamily: 'var(--font-mono)',
+        marginBottom: 6,
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
       }}>
@@ -163,28 +190,28 @@ export default function ChatMessage({
       )}
 
       <div style={{
-        fontSize:  '0.9375rem',
-        color:     'var(--text)',
+        fontSize: '0.9375rem',
+        color: 'var(--text)',
         lineHeight: 1.7,
         wordBreak: 'break-word',
       }}>
         {message.content
           ? renderContent(message.content)
           : !isStreaming && (
-              <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                no response
-              </span>
-            )
+            <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+              no response
+            </span>
+          )
         }
         {isStreaming && (
           <span style={{
-            display:       'inline-block',
-            width:         2,
-            height:        '1em',
-            background:    'var(--accent)',
-            marginLeft:    2,
+            display: 'inline-block',
+            width: 2,
+            height: '1em',
+            background: 'var(--accent)',
+            marginLeft: 2,
             verticalAlign: 'text-bottom',
-            animation:     'blink 1s step-end infinite',
+            animation: 'blink 1s step-end infinite',
           }} />
         )}
       </div>
