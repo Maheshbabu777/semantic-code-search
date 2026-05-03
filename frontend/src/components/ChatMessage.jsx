@@ -138,7 +138,7 @@ export default function ChatMessage({
   message,
   isStreaming,
   onChunkClick = null,
-  activeChunk = null,
+  activeChunk  = null,
 }) {
   const isUser = message.role === 'user';
 

@@ -2,21 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chatStream, deleteSession } from '../api/client';
 import ChatMessage from '../components/ChatMessage';
+import CodePanel from '../components/CodePanel';
 
 const CHUNK_CITE_RE = /\[Chunk\s+(\d+)\]/gi;
 
 export default function ChatPage() {
   const navigate = useNavigate();
 
-  const [messages,   setMessages]   = useState([]);
-  const [input,      setInput]      = useState('');
-  const [streaming,  setStreaming]  = useState(false);
-  const [error,      setError]      = useState('');
+  const [messages,    setMessages]    = useState([]);
+  const [input,       setInput]       = useState('');
+  const [streaming,   setStreaming]   = useState(false);
+  const [error,       setError]       = useState('');
+  const [activeChunk, setActiveChunk] = useState(null);
+  const [panelWidth,  setPanelWidth]  = useState(420);
 
-  const streamingRef    = useRef(false);
-  const abortCtrlRef    = useRef(null);
-  const bottomRef       = useRef(null);
-  const inputRef        = useRef(null);
+  const streamingRef = useRef(false);
+  const abortCtrlRef = useRef(null);
+  const bottomRef    = useRef(null);
+  const inputRef     = useRef(null);
+  const resizeRef    = useRef(null);
 
   const sessionId    = localStorage.getItem('session_id');
   const indexedCount = localStorage.getItem('indexed_count');
@@ -34,6 +38,18 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streaming]);
+
+  const handleChunkClick = useCallback((chunk) => {
+    setActiveChunk(prev =>
+      prev && chunk &&
+      prev.filepath   === chunk.filepath &&
+      prev.start_line === chunk.start_line
+        ? null
+        : chunk
+    );
+  }, []);
+
+  const handleClosePanel = useCallback(() => setActiveChunk(null), []);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -96,8 +112,8 @@ export default function ChatPage() {
 
           else if (event.type === 'text') {
             setMessages(prev => {
-              const updated  = [...prev];
-              const last     = updated[updated.length - 1];
+              const updated    = [...prev];
+              const last       = updated[updated.length - 1];
               const newContent = last.content + event.content;
 
               const cited = new Set(last.citedChunks || []);
@@ -159,6 +175,7 @@ export default function ChatPage() {
     setMessages([]);
     setError('');
     setInput('');
+    setActiveChunk(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -177,188 +194,247 @@ export default function ChatPage() {
     }
   }
 
+  const handleMouseDown = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+
+    const handleMouseMove = (moveEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const newWidth = Math.max(300, Math.min(window.innerWidth * 0.5, startWidth - delta));
+      setPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [panelWidth]);
+
   return (
     <div style={{
-      display:       'flex',
-      flexDirection: 'column',
-      height:        '100vh',
-      maxWidth:      780,
-      margin:        '0 auto',
-      padding:       '0 32px',
+      display:  'flex',
+      height:   '100vh',
+      overflow: 'hidden',
     }}>
-
-      <div className="search-header" style={{ paddingTop: 24, paddingBottom: 16, flexShrink: 0 }}>
-        <span className="status-pill">
-          <span className="status-dot" />
-          {Number(indexedCount).toLocaleString()} chunks indexed
-        </span>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            className="btn-ghost"
-            onClick={handleNewChat}
-            disabled={streaming}
-            title="Clear conversation history"
-          >
-            new chat
-          </button>
-          <button
-            className="btn-ghost"
-            onClick={() => navigate('/search')}
-            title="Switch to search mode"
-          >
-            Search
-          </button>
-          <button className="btn-exit" onClick={handleExit}>
-            exit session
-          </button>
-        </div>
-      </div>
-
-      <div className="chat-messages" style={{
-        flex:       1,
-        overflowY:  'auto',
-        paddingTop: 8,
-        paddingBottom: 16,
+      <div style={{
+        flex:          1,
+        display:       'flex',
+        flexDirection: 'column',
+        minWidth:      0,
+        overflow:      'hidden',
+        transition:    'flex 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
       }}>
-        {messages.length === 0 && (
-          <div style={{
-            display:        'flex',
-            flexDirection:  'column',
-            alignItems:     'center',
-            justifyContent: 'center',
-            height:         '100%',
-            gap:            12,
-            color:          'var(--text-dim)',
-          }}>
-            <p style={{ fontSize: '1.5rem', fontWeight: 300 }}>Ask anything</p>
-            <p style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
-              about the indexed codebase
-            </p>
-            <div style={{
-              display:   'flex',
-              flexWrap:  'wrap',
-              gap:       8,
-              marginTop: 8,
-              justifyContent: 'center',
-            }}>
-              {[
-                'How does chunking work?',
-                'Explain the search pipeline',
-                'How are sessions cleaned up?',
-                'What algorithms are used for exact search?',
-              ].map(suggestion => (
-                <button
-                  key={suggestion}
-                  onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
-                  style={{
-                    background:   'var(--bg2)',
-                    border:       '1px solid var(--border)',
-                    borderRadius: 8,
-                    padding:      '6px 12px',
-                    fontSize:     '0.8125rem',
-                    color:        'var(--text-muted)',
-                    cursor:       'pointer',
-                    transition:   'border-color 0.15s, color 0.15s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'var(--border-hover)';
-                    e.currentTarget.style.color = 'var(--text)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.color = 'var(--text-muted)';
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
+        <div style={{
+          flex:          1,
+          display:       'flex',
+          flexDirection: 'column',
+          maxWidth:      780,
+          width:         '100%',
+          margin:        '0 auto',
+          padding:       '0 32px',
+          minWidth:      0,
+          overflow:      'hidden',
+        }}>
+          <div className="search-header" style={{ paddingTop: 24, paddingBottom: 16, flexShrink: 0 }}>
+            <span className="status-pill">
+              <span className="status-dot" />
+              {Number(indexedCount).toLocaleString()} chunks indexed
+            </span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="btn-ghost"
+                onClick={handleNewChat}
+                disabled={streaming}
+                title="Clear conversation history"
+              >
+                new chat
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() => navigate('/search')}
+                title="Switch to search mode"
+              >
+                Search
+              </button>
+              <button className="btn-exit" onClick={handleExit}>
+                exit session
+              </button>
             </div>
           </div>
-        )}
 
-        {messages.map((msg, i) => (
-          <ChatMessage
-            key={i}
-            message={msg}
-            isStreaming={streaming && i === messages.length - 1 && msg.role === 'assistant'}
-          />
-        ))}
-
-        <div ref={bottomRef} />
-      </div>
-
-      <div style={{
-        flexShrink:   0,
-        paddingTop:   12,
-        paddingBottom: 24,
-        borderTop:    '1px solid var(--border)',
-      }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={input}
-            onChange={e => {
-              setInput(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about the codebase… (Enter to send, Shift+Enter for newline)"
-            disabled={streaming}
-            style={{
-              flex:        1,
-              fontFamily:  'var(--font-sans)',
-              fontSize:    '0.9375rem',
-              padding:     '12px 16px',
-              background:  'var(--bg2)',
-              border:      '1px solid var(--border)',
-              borderRadius: 10,
-              color:       'var(--text)',
-              outline:     'none',
-              resize:      'none',
-              lineHeight:  1.5,
-              minHeight:   48,
-              maxHeight:   160,
-              transition:  'border-color 0.2s',
-              overflowY:   'auto',
-            }}
-            onFocus={e  => e.target.style.borderColor = 'var(--border-hover)'}
-            onBlur={e   => e.target.style.borderColor = 'var(--border)'}
-          />
-
-          {streaming ? (
-            <button
-              className="btn-primary"
-              onClick={handleStop}
-              style={{ background: 'var(--score-low)', flexShrink: 0 }}
-            >
-              stop
-            </button>
-          ) : (
-            <button
-              className="btn-primary"
-              onClick={handleSend}
-              disabled={!input.trim()}
-              style={{ flexShrink: 0 }}
-            >
-              send
-            </button>
-          )}
-        </div>
-
-        {!streaming && messages.length > 0 && (
-          <p style={{
-            fontSize:  '0.75rem',
-            color:     'var(--text-dim)',
-            marginTop: 8,
-            fontStyle: 'italic',
+          <div className="chat-messages" style={{
+            flex:          1,
+            overflowY:     'auto',
+            paddingTop:    8,
+            paddingBottom: 16,
           }}>
-            history capped at last 10 messages sent to the model
-          </p>
-        )}
+            {messages.length === 0 && (
+              <div style={{
+                display:        'flex',
+                flexDirection:  'column',
+                alignItems:     'center',
+                justifyContent: 'center',
+                height:         '100%',
+                gap:            12,
+                color:          'var(--text-dim)',
+              }}>
+                <p style={{ fontSize: '1.5rem', fontWeight: 300 }}>Ask anything</p>
+                <p style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
+                  about the indexed codebase
+                </p>
+                <div style={{
+                  display:        'flex',
+                  flexWrap:       'wrap',
+                  gap:            8,
+                  marginTop:      8,
+                  justifyContent: 'center',
+                }}>
+                  {[
+                    'How does chunking work?',
+                    'Explain the search pipeline',
+                    'How are sessions cleaned up?',
+                    'What algorithms are used for exact search?',
+                  ].map(suggestion => (
+                    <button
+                      key={suggestion}
+                      onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
+                      style={{
+                        background:   'var(--bg2)',
+                        border:       '1px solid var(--border)',
+                        borderRadius: 8,
+                        padding:      '6px 12px',
+                        fontSize:     '0.8125rem',
+                        color:        'var(--text-muted)',
+                        cursor:       'pointer',
+                        transition:   'border-color 0.15s, color 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = 'var(--border-hover)';
+                        e.currentTarget.style.color = 'var(--text)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.color = 'var(--text-muted)';
+                      }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <ChatMessage
+                key={i}
+                message={msg}
+                isStreaming={streaming && i === messages.length - 1 && msg.role === 'assistant'}
+                onChunkClick={handleChunkClick}
+                activeChunk={activeChunk}
+              />
+            ))}
+
+            <div ref={bottomRef} />
+          </div>
+
+          <div style={{
+            flexShrink:    0,
+            paddingTop:    12,
+            paddingBottom: 24,
+            borderTop:     '1px solid var(--border)',
+          }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={input}
+                onChange={e => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about the codebase… (Enter to send, Shift+Enter for newline)"
+                disabled={streaming}
+                style={{
+                  flex:         1,
+                  fontFamily:   'var(--font-sans)',
+                  fontSize:     '0.9375rem',
+                  padding:      '12px 16px',
+                  background:   'var(--bg2)',
+                  border:       '1px solid var(--border)',
+                  borderRadius: 10,
+                  color:        'var(--text)',
+                  outline:      'none',
+                  resize:       'none',
+                  lineHeight:   1.5,
+                  minHeight:    48,
+                  maxHeight:    160,
+                  transition:   'border-color 0.2s',
+                  overflowY:    'auto',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--border-hover)'}
+                onBlur={e  => e.target.style.borderColor = 'var(--border)'}
+              />
+
+              {streaming ? (
+                <button
+                  className="btn-primary"
+                  onClick={handleStop}
+                  style={{ background: 'var(--score-low)', flexShrink: 0 }}
+                >
+                  stop
+                </button>
+              ) : (
+                <button
+                  className="btn-primary"
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  style={{ flexShrink: 0 }}
+                >
+                  send
+                </button>
+              )}
+            </div>
+
+            {!streaming && messages.length > 0 && (
+              <p style={{
+                fontSize:  '0.75rem',
+                color:     'var(--text-dim)',
+                marginTop: 8,
+                fontStyle: 'italic',
+              }}>
+                history capped at last 10 messages sent to the model
+              </p>
+            )}
+          </div>
+        </div>
       </div>
+
+      <div
+        ref={resizeRef}
+        onMouseDown={handleMouseDown}
+        style={{
+          width:      4,
+          background: 'var(--border)',
+          cursor:     'col-resize',
+          flexShrink: 0,
+          transition: 'background 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--accent)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--border)'}
+      />
+
+      <CodePanel 
+        chunk={activeChunk} 
+        onClose={handleClosePanel}
+        width={panelWidth}
+      />
     </div>
   );
 }

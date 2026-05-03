@@ -44,19 +44,19 @@ export default function SourcePills({
             onClick={() => onChunkClick && onChunkClick(isActive ? null : chunk)}
             title={`${chunk.filepath} · lines ${chunk.start_line}–${chunk.end_line} · score ${chunk.score?.toFixed(3)} · click to view`}
             style={{
-              display:      'inline-flex',
-              alignItems:   'center',
-              gap:          4,
-              padding:      '2px 8px',
-              borderRadius: 5,
-              border:       `1px solid ${borderColor}`,
-              background:   bgColor,
-              transition:   'background 0.2s, border-color 0.2s, opacity 0.15s',
-              cursor:       onChunkClick ? 'pointer' : 'default',
-              width:        'fit-content',
-              maxWidth:     '100%',
-              overflow:     'hidden',
-              outline:      isActive ? `1px solid var(--accent)` : 'none',
+              display:       'inline-flex',
+              alignItems:    'center',
+              gap:           4,
+              padding:       '2px 8px',
+              borderRadius:  5,
+              border:        `1px solid ${borderColor}`,
+              background:    bgColor,
+              transition:    'background 0.2s, border-color 0.2s, opacity 0.15s',
+              cursor:        onChunkClick ? 'pointer' : 'default',
+              width:         'fit-content',
+              maxWidth:      '100%',
+              overflow:      'hidden',
+              outline:       isActive ? '1px solid var(--accent)' : 'none',
               outlineOffset: 1,
             }}
             onMouseEnter={e => {
@@ -71,12 +71,12 @@ export default function SourcePills({
             }}
           >
             <span style={{
-              fontFamily:  'var(--font-mono)',
-              fontSize:    '0.625rem',
-              fontWeight:  600,
-              color:       isActive || isCited ? 'var(--accent)' : 'var(--text-dim)',
-              flexShrink:  0,
-              transition:  'color 0.2s',
+              fontFamily: 'var(--font-mono)',
+              fontSize:   '0.625rem',
+              fontWeight: 600,
+              color:      isActive || isCited ? 'var(--accent)' : 'var(--text-dim)',
+              flexShrink: 0,
+              transition: 'color 0.2s',
             }}>
               {chunkIndex}
             </span>
