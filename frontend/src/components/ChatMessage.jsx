@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown';
 import SourcePills from './SourcePills';
 
 function renderInline(text, key) {
@@ -84,7 +85,7 @@ function renderContent(text) {
             );
           }
 
-          const orderedMatch = line.match(/^(\d+)\.\s+(.*)/);
+          const orderedMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
           if (orderedMatch) {
             return (
               <div key={li} style={{
@@ -107,7 +108,7 @@ function renderContent(text) {
             );
           }
 
-          const bulletMatch = line.match(/^[-*]\s+(.*)/);
+          const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
           if (bulletMatch) {
             return (
               <div key={li} style={{
@@ -195,14 +196,56 @@ export default function ChatMessage({
         lineHeight: 1.7,
         wordBreak: 'break-word',
       }}>
-        {message.content
-          ? renderContent(message.content)
-          : !isStreaming && (
-            <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-              no response
-            </span>
-          )
-        }
+        {message.content ? (
+          <ReactMarkdown
+            components={{
+              code({ children, className }) {
+                const isBlock = className || String(children).includes('\n');
+                if (isBlock) {
+                  return (
+                    <pre className="code-block">
+                      <code>{children}</code>
+                    </pre>
+                  );
+                }
+                return (
+                  <code style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.8rem',
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 4,
+                    padding: '1px 6px',
+                    color: 'var(--accent)',
+                  }}>
+                    {children}
+                  </code>
+                );
+              },
+              p({ children }) {
+                return <p style={{ marginBottom: 8, lineHeight: 1.7 }}>{children}</p>;
+              },
+              ul({ children }) {
+                return <ul style={{ paddingLeft: 20, marginBottom: 8 }}>{children}</ul>;
+              },
+              ol({ children }) {
+                return <ol style={{ paddingLeft: 20, marginBottom: 8 }}>{children}</ol>;
+              },
+              li({ children }) {
+                return <li style={{ marginBottom: 4 }}>{children}</li>;
+              },
+              strong({ children }) {
+                return <strong style={{ color: 'var(--text)', fontWeight: 500 }}>{children}</strong>;
+              },
+            }}
+          >
+            {message.content}
+          </ReactMarkdown>
+        ) : !isStreaming && (
+          <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+            no response
+          </span>
+        )}
         {isStreaming && (
           <span style={{
             display: 'inline-block',

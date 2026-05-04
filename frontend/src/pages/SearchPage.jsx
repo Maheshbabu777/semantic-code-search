@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchCode, deleteSession } from '../api/client';
+import { deleteSession, searchCode } from '../api/client';
 import ResultCard from '../components/ResultCard';
 
 export default function SearchPage() {
@@ -19,18 +19,31 @@ export default function SearchPage() {
   }, [sessionId, navigate]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    const cachedSession = localStorage.getItem('last_session_id');
+    const cachedQuery = localStorage.getItem('last_query');
+    const cachedResults = localStorage.getItem('last_results');
 
-    function handleUnload() {
-      fetch(`http://localhost:8000/session/${sessionId}`, {
-        method:    'DELETE',
-        keepalive: true,
-      }).catch(() => {});
+    if (cachedSession && cachedSession === sessionId) {
+      if (cachedQuery) setQuery(cachedQuery);
+      if (cachedResults) {
+        try {
+          const parsed = JSON.parse(cachedResults);
+          if (Array.isArray(parsed)) {
+            setResults(parsed);
+            setSearched(true);
+          }
+        } catch (_) {}
+      }
     }
-
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (searched) {
+      localStorage.setItem('last_session_id', sessionId || '');
+      localStorage.setItem('last_query', query);
+      localStorage.setItem('last_results', JSON.stringify(results));
+    }
+  }, [query, results, searched, sessionId]);
 
   async function handleSearch() {
     if (!query.trim() || loading) return;
@@ -52,6 +65,8 @@ export default function SearchPage() {
     try { await deleteSession(sessionId); } catch (_) {}
     localStorage.removeItem('session_id');
     localStorage.removeItem('indexed_count');
+    localStorage.removeItem('last_query');
+    localStorage.removeItem('last_results');
     navigate('/');
   }
 

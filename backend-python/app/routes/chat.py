@@ -9,24 +9,24 @@ from groq import AsyncGroq, AuthenticationError, RateLimitError
 from app.searcher import search_code
 import app.state as state
 
-router      = APIRouter()
+router = APIRouter()
 groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
-MODEL       = "llama-3.3-70b-versatile"
-MAX_TOKENS  = 1024
+MODEL = "llama-3.3-70b-versatile"
+MAX_TOKENS = 1024
 MAX_HISTORY = 10
 MAX_MSG_LEN = 2000
 
 
 class HistoryMessage(BaseModel):
-    role:    str
+    role: str
     content: str
 
 
 class ChatRequest(BaseModel):
-    message:    str
+    message: str
     session_id: str
-    history:    list[HistoryMessage] = []
+    history: list[HistoryMessage] = []
 
 
 def build_system_prompt(chunks: list[dict]) -> str:
@@ -81,13 +81,13 @@ RETRIEVED CODE CONTEXT:
 """
     context_blocks = []
     for idx, chunk in enumerate(chunks, start=1):
-        filepath   = chunk["filepath"]
-        start      = chunk["start_line"]
-        end        = chunk["end_line"]
-        score      = chunk["score"]
-        code       = chunk["code"]
+        filepath = chunk["filepath"]
+        start = chunk["start_line"]
+        end = chunk["end_line"]
+        score = chunk["score"]
+        code = chunk["code"]
 
-        parts      = filepath.replace("\\", "/").split("/")
+        parts = filepath.replace("\\", "/").split("/")
         short_path = "/".join(parts[-3:]) if len(parts) >= 3 else filepath
 
         context_blocks.append(
@@ -104,20 +104,24 @@ def _sse(payload: dict) -> str:
 
 async def stream_response(req: ChatRequest):
     if req.session_id not in state.sessions:
-        yield _sse({
-            "type":    "error",
-            "message": "Invalid or expired session. Please re-index your codebase.",
-        })
+        yield _sse(
+            {
+                "type": "error",
+                "message": "Invalid or expired session. Please re-index your codebase.",
+            }
+        )
         return
 
     if len(req.message) > MAX_MSG_LEN:
-        yield _sse({
-            "type":    "error",
-            "message": (
-                f"Message too long — please keep questions "
-                f"under {MAX_MSG_LEN} characters."
-            ),
-        })
+        yield _sse(
+            {
+                "type": "error",
+                "message": (
+                    f"Message too long — please keep questions "
+                    f"under {MAX_MSG_LEN} characters."
+                ),
+            }
+        )
         return
 
     try:
@@ -129,33 +133,41 @@ async def stream_response(req: ChatRequest):
         yield _sse({"type": "error", "message": f"Retrieval failed: {str(e)}"})
         return
 
-    if not chunks:
-        yield _sse({
-            "type":    "text",
-            "content": (
-                "I couldn't find anything relevant in the indexed codebase "
-                "for that question. Try asking about a specific function, "
-                "file, or feature."
-            ),
-        })
-        yield _sse({"type": "done"})
-        return
-
-    yield _sse({
-        "type":   "context",
-        "chunks": [
+    if chunks:
+        yield _sse(
             {
-                "filepath":   c["filepath"],
-                "start_line": c["start_line"],
-                "end_line":   c["end_line"],
-                "score":      c["score"],
-                "code":       c["code"],
+                "type": "context",
+                "chunks": [
+                    {
+                        "filepath": c["filepath"],
+                        "start_line": c["start_line"],
+                        "end_line": c["end_line"],
+                        "score": c["score"],
+                        "code": c["code"],
+                    }
+                    for c in chunks
+                ],
             }
-            for c in chunks
-        ],
-    })
+        )
+        system_prompt = build_system_prompt(chunks)
+    else:
+        system_prompt = """\
+You are a knowledgeable software engineer and friendly code assistant helping a developer.
+No relevant code chunks were found for this question.
 
-    system_prompt = build_system_prompt(chunks)
+ONLY answer questions related to software development (coding, debugging, best practices, etc.).
+If the question is not clearly software development/coding-related — including current affairs, personalities, entertainment, opinions, creative writing, personal tasks, paeronal thoughts or unrelated topics — politely refuse.
+
+PERSONALITY:
+- Warm but not over the top. Conversational, not robotic.
+- No "great question!" on every message.
+
+MARKDOWN FORMATTING:
+- Use **bold** for emphasis and inline identifiers.
+- Use fenced code blocks only for multi-line snippets.
+- Use numbered lists for step-by-step, bullet points for items.
+"""
+
     groq_messages = [
         {"role": "system", "content": system_prompt},
         *[{"role": m.role, "content": m.content} for m in req.history[-MAX_HISTORY:]],
@@ -179,15 +191,19 @@ async def stream_response(req: ChatRequest):
         yield _sse({"type": "done"})
 
     except AuthenticationError:
-        yield _sse({
-            "type":    "error",
-            "message": "GROQ_API_KEY is missing or invalid. Check your .env file.",
-        })
+        yield _sse(
+            {
+                "type": "error",
+                "message": "GROQ_API_KEY is missing or invalid. Check your .env file.",
+            }
+        )
     except RateLimitError:
-        yield _sse({
-            "type":    "error",
-            "message": "Groq rate limit hit — wait a moment and try again.",
-        })
+        yield _sse(
+            {
+                "type": "error",
+                "message": "Groq rate limit hit — wait a moment and try again.",
+            }
+        )
     except Exception as e:
         yield _sse({"type": "error", "message": f"LLM error: {str(e)}"})
 
@@ -199,8 +215,8 @@ async def chat(req: ChatRequest):
         media_type="text/event-stream",
         headers={
             "X-Accel-Buffering": "no",
-            "Cache-Control":     "no-cache",
-            "Connection":        "keep-alive",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
         },
     )

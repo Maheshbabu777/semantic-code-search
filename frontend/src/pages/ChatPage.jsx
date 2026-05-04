@@ -9,21 +9,34 @@ const CHUNK_CITE_RE = /\[Chunk\s+(\d+)\]/gi;
 export default function ChatPage() {
   const navigate = useNavigate();
 
-  const [messages,    setMessages]    = useState([]);
-  const [input,       setInput]       = useState('');
-  const [streaming,   setStreaming]   = useState(false);
-  const [error,       setError]       = useState('');
+  const sessionId = localStorage.getItem('session_id');
+  const indexedCount = localStorage.getItem('indexed_count');
+
+  const [messages, setMessages] = useState(() => {
+    const saved = sessionStorage.getItem(`chat_${sessionId}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [error, setError] = useState('');
   const [activeChunk, setActiveChunk] = useState(null);
-  const [panelWidth,  setPanelWidth]  = useState(420);
+  const [panelWidth, setPanelWidth] = useState(420);
 
   const streamingRef = useRef(false);
   const abortCtrlRef = useRef(null);
-  const bottomRef    = useRef(null);
-  const inputRef     = useRef(null);
-  const resizeRef    = useRef(null);
+  const bottomRef = useRef(null);
+  const inputRef = useRef(null);
+  const resizeRef = useRef(null);
+  const chatScrollRef = useRef(null);
 
-  const sessionId    = localStorage.getItem('session_id');
-  const indexedCount = localStorage.getItem('indexed_count');
+  const handleOuterWheel = useCallback((e) => {
+    if (!chatScrollRef.current) return;
+  
+    if (e.target.closest('[data-code-panel]')) return;
+    if (e.target.closest('pre') || e.target.closest('code')) return;
+    
+    chatScrollRef.current.scrollTop += e.deltaY;
+  }, []);
 
   useEffect(() => {
     if (!sessionId) navigate('/');
@@ -39,11 +52,17 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streaming]);
 
+  useEffect(() => {
+    if (sessionId) {
+      sessionStorage.setItem(`chat_${sessionId}`, JSON.stringify(messages));
+    }
+  }, [messages, sessionId]);
+
   const handleChunkClick = useCallback((chunk) => {
     setActiveChunk(prev =>
       prev && chunk &&
-      prev.filepath   === chunk.filepath &&
-      prev.start_line === chunk.start_line
+        prev.filepath === chunk.filepath &&
+        prev.start_line === chunk.start_line
         ? null
         : chunk
     );
@@ -63,7 +82,7 @@ export default function ChatPage() {
 
     setMessages(prev => [
       ...prev,
-      { role: 'user',      content: text },
+      { role: 'user', content: text },
       { role: 'assistant', content: '', sources: [], citedChunks: [] },
     ]);
     setInput('');
@@ -72,15 +91,15 @@ export default function ChatPage() {
     abortCtrlRef.current = ctrl;
 
     try {
-      const reader  = await chatStream({
-        message:   text,
+      const reader = await chatStream({
+        message: text,
         sessionId,
-        history:   historySnapshot,
-        signal:    ctrl.signal,
+        history: historySnapshot,
+        signal: ctrl.signal,
       });
 
       const decoder = new TextDecoder();
-      let   buffer  = '';
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -112,8 +131,8 @@ export default function ChatPage() {
 
           else if (event.type === 'text') {
             setMessages(prev => {
-              const updated    = [...prev];
-              const last       = updated[updated.length - 1];
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
               const newContent = last.content + event.content;
 
               const cited = new Set(last.citedChunks || []);
@@ -125,7 +144,7 @@ export default function ChatPage() {
 
               updated[updated.length - 1] = {
                 ...last,
-                content:     newContent,
+                content: newContent,
                 citedChunks: [...cited],
               };
               return updated;
@@ -141,7 +160,7 @@ export default function ChatPage() {
       if (err.name === 'AbortError') {
         setMessages(prev => {
           const updated = [...prev];
-          const last    = updated[updated.length - 1];
+          const last = updated[updated.length - 1];
           if (last?.role === 'assistant' && !last.content) {
             return updated.slice(0, -1);
           }
@@ -172,6 +191,7 @@ export default function ChatPage() {
 
   function handleNewChat() {
     if (streamingRef.current) handleStop();
+    sessionStorage.removeItem(`chat_${sessionId}`);
     setMessages([]);
     setError('');
     setInput('');
@@ -181,7 +201,8 @@ export default function ChatPage() {
 
   async function handleExit() {
     if (abortCtrlRef.current) abortCtrlRef.current.abort();
-    try { await deleteSession(sessionId); } catch (_) {}
+    sessionStorage.removeItem(`chat_${sessionId}`);
+    try { await deleteSession(sessionId); } catch (_) { }
     localStorage.removeItem('session_id');
     localStorage.removeItem('indexed_count');
     navigate('/');
@@ -216,28 +237,30 @@ export default function ChatPage() {
 
   return (
     <div style={{
-      display:  'flex',
-      height:   '100vh',
+      display: 'flex',
+      height: '100vh',
       overflow: 'hidden',
     }}>
-      <div style={{
-        flex:          1,
-        display:       'flex',
-        flexDirection: 'column',
-        minWidth:      0,
-        overflow:      'hidden',
-        transition:    'flex 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
-      }}>
-        <div style={{
-          flex:          1,
-          display:       'flex',
+      <div
+        onWheel={handleOuterWheel}
+        style={{
+          flex: 1,
+          display: 'flex',
           flexDirection: 'column',
-          maxWidth:      780,
-          width:         '100%',
-          margin:        '0 auto',
-          padding:       '0 32px',
-          minWidth:      0,
-          overflow:      'hidden',
+          minWidth: 0,
+          overflow: 'hidden',
+          transition: 'flex 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+        }}>
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          maxWidth: 780,
+          width: '100%',
+          margin: '0 auto',
+          padding: '0 32px',
+          minWidth: 0,
+          overflow: 'hidden',
         }}>
           <div className="search-header" style={{ paddingTop: 24, paddingBottom: 16, flexShrink: 0 }}>
             <span className="status-pill">
@@ -267,31 +290,31 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="chat-messages" style={{
-            flex:          1,
-            overflowY:     'auto',
-            paddingTop:    8,
+          <div ref={chatScrollRef} className="chat-messages" style={{
+            flex: 1,
+            overflowY: 'auto',
+            paddingTop: 8,
             paddingBottom: 16,
           }}>
             {messages.length === 0 && (
               <div style={{
-                display:        'flex',
-                flexDirection:  'column',
-                alignItems:     'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
                 justifyContent: 'center',
-                height:         '100%',
-                gap:            12,
-                color:          'var(--text-dim)',
+                height: '100%',
+                gap: 12,
+                color: 'var(--text-dim)',
               }}>
                 <p style={{ fontSize: '1.5rem', fontWeight: 300 }}>Ask anything</p>
                 <p style={{ fontSize: '0.875rem', fontStyle: 'italic' }}>
                   about the indexed codebase
                 </p>
                 <div style={{
-                  display:        'flex',
-                  flexWrap:       'wrap',
-                  gap:            8,
-                  marginTop:      8,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginTop: 8,
                   justifyContent: 'center',
                 }}>
                   {[
@@ -304,14 +327,14 @@ export default function ChatPage() {
                       key={suggestion}
                       onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
                       style={{
-                        background:   'var(--bg2)',
-                        border:       '1px solid var(--border)',
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
                         borderRadius: 8,
-                        padding:      '6px 12px',
-                        fontSize:     '0.8125rem',
-                        color:        'var(--text-muted)',
-                        cursor:       'pointer',
-                        transition:   'border-color 0.15s, color 0.15s',
+                        padding: '6px 12px',
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s, color 0.15s',
                       }}
                       onMouseEnter={e => {
                         e.currentTarget.style.borderColor = 'var(--border-hover)';
@@ -343,12 +366,12 @@ export default function ChatPage() {
           </div>
 
           <div style={{
-            flexShrink:    0,
-            paddingTop:    12,
+            flexShrink: 0,
+            paddingTop: 12,
             paddingBottom: 24,
-            borderTop:     '1px solid var(--border)',
+            borderTop: '1px solid var(--border)',
           }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <div className="chat-input-wrap">
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -361,51 +384,44 @@ export default function ChatPage() {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about the codebase… (Enter to send, Shift+Enter for newline)"
                 disabled={streaming}
-                style={{
-                  flex:         1,
-                  fontFamily:   'var(--font-sans)',
-                  fontSize:     '0.9375rem',
-                  padding:      '12px 16px',
-                  background:   'var(--bg2)',
-                  border:       '1px solid var(--border)',
-                  borderRadius: 10,
-                  color:        'var(--text)',
-                  outline:      'none',
-                  resize:       'none',
-                  lineHeight:   1.5,
-                  minHeight:    48,
-                  maxHeight:    160,
-                  transition:   'border-color 0.2s',
-                  overflowY:    'auto',
-                }}
+                className="chat-input"
                 onFocus={e => e.target.style.borderColor = 'var(--border-hover)'}
-                onBlur={e  => e.target.style.borderColor = 'var(--border)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
               />
 
               {streaming ? (
                 <button
-                  className="btn-primary"
                   onClick={handleStop}
-                  style={{ background: 'var(--score-low)', flexShrink: 0 }}
+                  className="chat-input-btn stop"
+                  title="Stop generating"
                 >
-                  stop
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path
+                      d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z"
+                    />
+                  </svg>
                 </button>
               ) : (
                 <button
-                  className="btn-primary"
                   onClick={handleSend}
                   disabled={!input.trim()}
-                  style={{ flexShrink: 0 }}
+                  className="chat-input-btn send"
+                  title="Send message"
                 >
-                  send
+                  ↑
                 </button>
               )}
             </div>
 
             {!streaming && messages.length > 0 && (
               <p style={{
-                fontSize:  '0.75rem',
-                color:     'var(--text-dim)',
+                fontSize: '0.75rem',
+                color: 'var(--text-dim)',
                 marginTop: 8,
                 fontStyle: 'italic',
               }}>
@@ -420,9 +436,9 @@ export default function ChatPage() {
         ref={resizeRef}
         onMouseDown={handleMouseDown}
         style={{
-          width:      4,
+          width: 4,
           background: 'var(--border)',
-          cursor:     'col-resize',
+          cursor: 'col-resize',
           flexShrink: 0,
           transition: 'background 0.15s',
         }}
@@ -430,8 +446,8 @@ export default function ChatPage() {
         onMouseLeave={e => e.currentTarget.style.background = 'var(--border)'}
       />
 
-      <CodePanel 
-        chunk={activeChunk} 
+      <CodePanel
+        chunk={activeChunk}
         onClose={handleClosePanel}
         width={panelWidth}
       />
