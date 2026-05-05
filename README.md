@@ -1,8 +1,8 @@
 # Semantic Code Search
 
-> Search any codebase using natural language. Paste a GitHub URL or upload a zip — get back the most semantically relevant code chunks with file path and line numbers.
+> Search any codebase using natural language. Paste a GitHub URL or upload a zip — get back the most semantically relevant code chunks with file path and line numbers. Ask follow-up questions via the RAG chat interface.
 
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![Status](https://img.shields.io/badge/status-complete-brightgreen)
 ![Node](https://img.shields.io/badge/node-ESM-green)
 ![Python](https://img.shields.io/badge/python-3.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
@@ -13,14 +13,7 @@
 
 Most code search tools only match exact strings. This engine understands **meaning**.
 
-Search `"function that finds a pattern in text"` and it returns your KMP and Boyer-Moore implementations — even though those exact words don't appear in the code.
-
-It uses a **two-stage retrieve-then-rerank pipeline**:
-
-- **Stage 1 — Bi-encoder retrieval** — `st-codesearch-distilroberta-base` embeds the query and retrieves the top 20 candidates from ChromaDB using approximate nearest neighbor search. Fast but shallow.
-- **Stage 2 — Cross-encoder re-ranking** — `ms-marco-MiniLM-L-6-v2` reads the query and each candidate chunk together to produce a true relevance score. Slower but dramatically more accurate — captures interactions between query and code that bi-encoders miss.
-
-Combined with keyword overlap scoring and dynamic thresholding, this produces production-grade retrieval quality on a fully local setup.
+Search `"function that finds a pattern in text"` and it returns your KMP and Boyer-Moore implementations — even though those exact words don't appear in the code. It combines semantic embeddings with keyword overlap scoring, dynamic thresholding, and a RAG chat interface that lets you ask follow-up questions with streaming responses and source citations.
 
 ---
 
@@ -40,14 +33,20 @@ User
                        ├── 2. bi-encoder → top 20 candidates from ChromaDB
                        ├── 3. hybrid score (semantic 0.75 + keyword 0.25)
                        ├── 4. dynamic threshold filter
-                       ├── 5. cross-encoder re-rank → top 5
                        └── results returned with filepath + line numbers
+
+ User chats  →  POST /chat
+                       │
+                       ├── 1. retrieve top 6 chunks via search pipeline
+                       ├── 2. build system prompt with retrieved context
+                       ├── 3. stream response via Groq (llama-3.3-70b-versatile)
+                       └── SSE stream → frontend with [Chunk N] citations
 
 Node.js service (port 3001)
  └── POST /search  →  KMP / Boyer-Moore exact match → line + column positions
 ```
 
-Every user gets a unique `session_id` on indexing. All searches are scoped to that session — no data leaks between concurrent users.
+Every user gets a unique `session_id` on indexing. All searches and chats are scoped to that session — no data leaks between concurrent users.
 
 ---
 
@@ -58,25 +57,21 @@ Every user gets a unique `session_id` on indexing. All searches are scoped to th
 | Exact search | Node.js, Express, ESM |
 | Semantic search | Python 3.10, FastAPI, uvicorn |
 | Bi-encoder model | `flax-sentence-embeddings/st-codesearch-distilroberta-base` |
-| Re-ranking model | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| Vector store | ChromaDB (persistent, session-scoped) |
+| LLM inference | Groq API — `llama-3.3-70b-versatile` |
+| Vector store | ChromaDB (persistent, session-scoped, cosine similarity) |
+| Session persistence | SQLite via `session_store.py` |
 | Frontend | React 19, Vite, React Router, Axios |
 | Testing | Vitest (Node.js) |
 | Dev tooling | nodemon, conda |
+| Infrastructure | Docker Compose with named volumes |
 
-### Model choices
+### Model choice
 
-**Bi-encoder — `st-codesearch-distilroberta-base`**
+**`st-codesearch-distilroberta-base`** — trained on the CodeSearchNet dataset, purpose-built for natural language → code retrieval. Evaluated against alternatives and chosen because general-purpose models (`bge-small-en-v1.5`, `mDeBERTa-v3`) degrade on code semantics, and `codebert-base` lacks a built-in pooling layer and is heavier at ~500MB.
 
-Trained on the **CodeSearchNet dataset** — natural language descriptions paired with code functions from GitHub. Purpose-built for natural language → code retrieval. Evaluated and chosen over:
+A cross-encoder reranker (`ms-marco-MiniLM-L-6-v2`) was evaluated and deliberately removed. It is trained on web passage pairs, not code, and produces near-random relevance scores on code chunks — degrading retrieval quality rather than improving it. This is documented as an intentional decision, not an omission.
 
-- `mDeBERTa-v3-base` — multilingual overhead is irrelevant since all code is written in English regardless of developer background
-- `codebert-base` — no pooling layer baked in, heavier at ~500MB
-- `bge-small-en-v1.5` — trained on general English text, weak on code semantics
-
-**Cross-encoder — `ms-marco-MiniLM-L-6-v2`**
-
-Reads query and code chunk together rather than encoding independently. This joint reading captures relevance signals that bi-encoders miss — a chunk containing the right function but with low keyword overlap will still rank correctly. At ~80MB it runs on CPU without meaningful latency impact on a 20-candidate set.
+ChromaDB collections are created with `hnsw:space: cosine` — the default L2 distance makes `1 - distance` mathematically incorrect and produces negative similarity scores.
 
 ---
 
@@ -91,52 +86,50 @@ semantic-code-search/
 │   │   │   ├── kmp.js              ← KMP algorithm + failure table
 │   │   │   ├── boyerMoore.js       ← Boyer-Moore bad character heuristic
 │   │   │   └── utils.js            ← character index → line/col resolution
-│   │   └── routes/
-│   │       └── search.js           ← POST /search route
+│   │   └── routes/search.js
 │   ├── tests/
 │   │   ├── kmp.test.js
 │   │   └── boyerMoore.test.js
 │   └── package.json
 │
-├── backend-python/                 ← Semantic search service
+├── backend-python/                 ← Semantic search + RAG chat service
 │   ├── app/
-│   │   ├── main.py                 ← FastAPI entry point, CORS, lifespan cleanup
-│   │   ├── db.py                   ← Single shared ChromaDB PersistentClient
-│   │   ├── state.py                ← In-memory session store
+│   │   ├── main.py                 ← FastAPI entry point, lifespan cleanup, orphan sweep
+│   │   ├── db.py                   ← Single shared ChromaDB PersistentClient singleton
+│   │   ├── state.py                ← In-memory session store, loads from SQLite on startup
+│   │   ├── session_store.py        ← SQLite-backed session persistence
 │   │   ├── embeddings.py           ← Model loading + single/batch inference
-│   │   ├── reranker.py             ← Cross-encoder re-ranking (ms-marco-MiniLM)
-│   │   ├── chunker.py              ← Function-level chunker + 15-line fallback
+│   │   ├── chunker.py              ← Function-level chunker + fixed-size fallback
 │   │   ├── indexer.py              ← File walker, skip lists, enrichment, batch embed
-│   │   ├── searcher.py             ← Two-stage pipeline: retrieve → hybrid score → rerank
+│   │   ├── searcher.py             ← Hybrid scoring pipeline + dynamic threshold
 │   │   ├── github.py               ← Git clone (depth=1) + temp folder cleanup
 │   │   ├── uploader.py             ← Zip extraction to temp folder
 │   │   └── routes/
-│   │       ├── embed.py            ← POST /embed/single, /embed/batch
-│   │       ├── index.py            ← POST /index (GitHub URL)
-│   │       ├── upload.py           ← POST /upload (zip file)
+│   │       ├── index.py            ← POST /index
+│   │       ├── upload.py           ← POST /upload
 │   │       ├── search.py           ← POST /search
-│   │       └── sessions.py         ← DELETE /session/{id}
+│   │       ├── sessions.py         ← DELETE /session/{id}
+│   │       └── chat.py             ← POST /chat — SSE streaming, Groq, RAG
 │   ├── requirements.txt
 │   └── .env
 │
 ├── frontend/                       ← React UI
 │   ├── src/
-│   │   ├── main.jsx
 │   │   ├── App.jsx                 ← React Router setup
-│   │   ├── index.css               ← Design system (DM Sans + DM Mono, dark theme)
-│   │   ├── api/
-│   │   │   └── client.js           ← All API calls
+│   │   ├── api/client.js           ← All API calls
 │   │   ├── pages/
 │   │   │   ├── IndexPage.jsx       ← GitHub URL + zip upload + animated loading
-│   │   │   └── SearchPage.jsx      ← Search bar + results + session exit
+│   │   │   ├── SearchPage.jsx      ← Search bar + result cards + session exit
+│   │   │   └── ChatPage.jsx        ← Streaming chat, history, resizable code panel
 │   │   └── components/
-│   │       └── ResultCard.jsx      ← Score badge, filepath, line range, code block
+│   │       ├── ResultCard.jsx      ← Score badge, filepath, line range, code block
+│   │       ├── ChatMessage.jsx     ← Markdown rendering via react-markdown
+│   │       ├── CodePanel.jsx       ← Slide-in panel with line-number gutters
+│   │       └── SourcePills.jsx     ← Citation pills with highlight on chunk reference
 │   └── package.json
 │
-├── docs/
-├── docker-compose.yml              ← Coming Week 6
+├── docker-compose.yml
 ├── .env.example
-├── .gitignore
 └── README.md
 ```
 
@@ -164,6 +157,13 @@ cd semantic-code-search
 cp .env.example .env
 ```
 
+Add your keys to `.env`:
+
+```
+GROQ_API_KEY=your_groq_key
+HF_TOKEN=your_huggingface_token
+```
+
 ### 3. Start the Node.js service
 
 ```bash
@@ -182,7 +182,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-First run downloads both models (~330MB total). Cached after that — subsequent starts are fast.
+First run downloads the embedding model (~330MB). Cached after that — subsequent starts are fast.
 
 ### 5. Start the frontend
 
@@ -194,108 +194,13 @@ npm run dev        # port 5173
 
 Open `http://localhost:5173`, paste a GitHub URL, and search.
 
----
+### Docker
 
-## API reference
-
-### Python service — `http://localhost:8000`
-
-#### `GET /health`
-```json
-{ "status": "ok" }
+```bash
+docker-compose up --build
 ```
 
-#### `POST /index`
-Index a public GitHub repository.
-```json
-{ "github_url": "https://github.com/username/repo" }
-```
-Returns:
-```json
-{
-  "indexed": 156,
-  "session_id": "uuid-here",
-  "github_url": "https://github.com/username/repo"
-}
-```
-
-#### `POST /upload`
-Index a local codebase via zip file upload.
-```
-Content-Type: multipart/form-data
-file: project.zip
-```
-Returns same shape as `/index` with `source` instead of `github_url`.
-
-#### `POST /search`
-Search the indexed codebase.
-```json
-{
-  "query": "function that finds a pattern in text",
-  "session_id": "uuid-from-index",
-  "top_k": 5
-}
-```
-Returns:
-```json
-{
-  "query": "function that finds a pattern in text",
-  "results": [
-    {
-      "code": "function kmpSearch(text, pattern) { ... }",
-      "filepath": "/tmp/codesearch_abc/src/search/kmp.js",
-      "start_line": 14,
-      "end_line": 38,
-      "score": 0.9121
-    }
-  ]
-}
-```
-
-Scores reflect the cross-encoder relevance judgment, not raw cosine similarity.
-
-#### `DELETE /session/{session_id}`
-Close a session. Deletes the ChromaDB collection and temp folder.
-```json
-{ "deleted": "uuid-here" }
-```
-
-#### `POST /embed/single`
-```json
-{ "text": "binary search implementation" }
-```
-
-#### `POST /embed/batch`
-```json
-{ "texts": ["binary search", "linked list traversal"] }
-```
-
----
-
-### Node.js service — `http://localhost:3001`
-
-#### `POST /search`
-Exact pattern matching with line and column resolution.
-```json
-{
-  "text": "function kmpSearch(text, pattern) { ... }",
-  "pattern": "kmpSearch",
-  "algorithm": "kmp"
-}
-```
-`algorithm` accepts `"kmp"` (default) or `"bm"` (Boyer-Moore).
-
-Returns:
-```json
-{
-  "algorithm": "kmp",
-  "pattern": "kmpSearch",
-  "matchCount": 1,
-  "matches": [
-    { "index": 9, "line": 1, "col": 10 }
-  ]
-}
-```
+Covers the Python backend and React frontend with named volumes for ChromaDB persistence and HuggingFace model caching. Node backend is excluded as it is stateless.
 
 ---
 
@@ -303,67 +208,45 @@ Returns:
 
 ### Chunking
 
-Files are split at function boundaries using regex that detects:
+Files are split at function boundaries using language-aware regex:
 
-- Python: `def`, `async def`
-- JavaScript/TypeScript: `function`, `const`, `let`, `var` assignments
+- **Python** — detects `def` and `async def` with indentation tracking to find where each function ends
+- **JavaScript/TypeScript** — detects `function`, arrow functions, and `const`/`let`/`var` assignments with brace depth counting
 
-Files with no detected boundaries fall back to 15-line chunks so no file is silently skipped.
+Files with no detected boundaries fall back to fixed 25-line chunks so no file is silently skipped. Chunks are capped at 60 lines and split further if exceeded. Test files, spec files, and common non-source directories (`node_modules`, `dist`, `__pycache__`, `venv` etc.) are excluded from indexing to reduce noise.
 
 ### Chunk enrichment
 
-Before embedding, every chunk is enriched with file context:
+Before embedding, every chunk is prefixed with file context:
 
 ```
-File: kmp.js
-Code:
+File: kmp.js (lines 14–38)
+
 function kmpSearch(text, pattern) { ... }
 ```
 
-This aligns the chunk format with how the model was trained — on natural language + code pairs — improving semantic matching quality.
+This prefix is applied **at index time**, aligning the document format with how the model was trained on natural language + code pairs. Queries are enriched with `"Search for code that: <query>"` to match this asymmetry. Enrichment must happen before embedding — applying it only at query time produces an embedding mismatch that degrades retrieval quality.
 
-### Query enrichment
-
-Queries are prefixed before embedding:
-
-```
-Search for code that: function that finds a pattern in text
-```
-
-### Hybrid scoring (Stage 1)
-
-Initial candidates are scored using:
+### Hybrid scoring
 
 ```
 combined_score = 0.75 × semantic_score + 0.25 × keyword_overlap
 ```
 
-Keyword overlap captures exact identifier matches that embedding similarity may underweight.
+- `semantic_score` — cosine similarity from ChromaDB, normalized as `max(0.0, round(1 - distance / 2, 4))`
+- `keyword_overlap` — Jaccard-style word overlap between query tokens and `raw_code` from metadata, not the enriched document, to avoid false matches on the file prefix
 
 ### Dynamic thresholding
-
-Rather than a fixed cutoff, the threshold adapts to each query's score distribution:
 
 ```
 threshold = max(0.2, 0.5 × max_score)
 ```
 
-### Cross-encoder re-ranking (Stage 2)
+Rather than a fixed cutoff, the threshold adapts to each query's score distribution. A query with a strong best match raises the bar for everything else. Results below `MIN_CONFIDENT_SCORE` are dropped entirely before thresholding.
 
-Filtered candidates are passed as `[query, code]` pairs to the cross-encoder. It scores each pair jointly — reading query and code together — then returns the top-k by relevance score.
+### RAG chat
 
-### Skipped directories
-
-```
-node_modules  .git  __pycache__  dist  build  .next  venv
-tests  test  __tests__  docs  doc  examples  demo
-```
-
-### Skipped file patterns
-
-`test_*`, `spec_*`, `*_test.py`, `*_spec.py`, `*.test.js`, `*.spec.js`, `*.test.ts`, `*.spec.ts`
-
-Test files contain high keyword overlap with source queries and pollute results without contributing useful retrievals.
+Retrieved chunks (top 6) are injected into the system prompt with `[Chunk N]` labels including filepath, line range, and score. The LLM is instructed to cite chunks inline using this notation. The frontend parses `[Chunk N]` references from the streamed response in real time and highlights the corresponding source pills. Clicking a pill opens the code panel showing the exact file and lines. When no chunks meet the confidence threshold, the LLM answers from general coding knowledge rather than refusing.
 
 ---
 
@@ -375,57 +258,79 @@ POST /index or /upload
   → repo cloned / zip extracted to /tmp/codesearch_{id}
   → files chunked, enriched, embedded in batch, upserted to ChromaDB
   → collection: code_{session_id}
-  → session stored in state.sessions
+  → session saved to SQLite + loaded into state.sessions
 
-POST /search
-  → session_id validated
-  → two-stage retrieval: bi-encoder → hybrid score → cross-encoder
-  → top-k results returned
+POST /search or POST /chat
+  → session_id validated against state.sessions
+  → retrieval scoped to code_{session_id} collection
 
 DELETE /session/{session_id}
   → ChromaDB collection deleted
   → temp folder deleted
-  → session removed from state.sessions
+  → session removed from SQLite and state.sessions
 
 Server startup
-  → orphaned collections from previous runs auto-deleted
+  → SQLite sessions loaded into memory
+  → orphaned ChromaDB collections (not in SQLite) auto-deleted
 
 Server shutdown
-  → all remaining temp folders cleaned up
+  → all active collections deleted
+  → all temp folders cleaned up
+  → all session records removed from SQLite
 ```
 
-Sessions are in-memory. A server restart requires re-indexing.
+Sessions persist across page refreshes via `localStorage` (session ID) and `sessionStorage` (chat history). A server restart requires re-indexing. TTL-based cleanup was intentionally rejected in favour of explicit user-driven cleanup and the startup orphan sweep.
+
+A single shared `PersistentClient` instance in `db.py` is used across all modules. Multiple `PersistentClient` instances cause orphan collection bugs — the singleton pattern is the fix.
+
+---
+
+## API reference
+
+### Python service — `http://localhost:8000`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| POST | `/index` | Index a GitHub repo — body: `{ github_url }` |
+| POST | `/upload` | Index a zip file — multipart form: `file` |
+| POST | `/search` | Search — body: `{ query, session_id, top_k }` |
+| POST | `/chat` | RAG chat (SSE) — body: `{ message, session_id, history }` |
+| DELETE | `/session/{id}` | Close and clean up a session |
+
+### Node.js service — `http://localhost:3001`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/search` | Exact match — body: `{ text, pattern, algorithm }` |
+
+`algorithm` accepts `"kmp"` (default) or `"bm"` (Boyer-Moore). Returns match indices with line and column resolution.
 
 ---
 
 ## Known limitations
 
-- **In-memory sessions** — server restart wipes all sessions, users must re-index
-- **Single-process ChromaDB** — `PersistentClient` is not safe for parallel write requests; concurrent indexing may cause conflicts
-- **Blocking indexing** — indexing runs on the request thread; large repos hold the connection open until complete
-- **No rate limiting** — repeated indexing requests can exhaust disk and memory
-- **Regex-based chunker** — complex anonymous functions, decorators, or deeply nested closures may not chunk correctly
+- **In-memory sessions** — server restart requires re-indexing
+- **Single-process ChromaDB** — concurrent indexing may cause conflicts
+- **Blocking indexing** — large repos hold the connection open until complete
+- **No rate limiting** — repeated indexing can exhaust disk and memory
+- **Regex-based chunker** — complex anonymous functions or decorators may not chunk correctly
 
 ---
 
 ## Roadmap
 
-- [x] Node.js exact search — KMP + Boyer-Moore with line/col resolution
-- [x] FastAPI embedding service — `st-codesearch-distilroberta-base`
-- [x] ChromaDB vector store — persistent, session-scoped, single shared client
-- [x] GitHub URL indexing — depth=1 clone, temp folder, auto-cleanup
-- [x] Zip upload indexing — multipart, extraction, same pipeline
-- [x] Session isolation — uuid4 per user, isolated ChromaDB collections
-- [x] Test file filtering — excluded from indexing to reduce noise
-- [x] Chunk and query enrichment — file context prefix improves alignment
-- [x] Hybrid scoring — semantic + keyword overlap combined score
-- [x] Dynamic thresholding — adapts cutoff to each query's score distribution
-- [x] Cross-encoder re-ranking — two-stage retrieve-then-rerank pipeline
-- [x] Orphan cleanup — stale collections deleted on server startup
-- [x] React frontend — dark theme, animated loading, search + results
-- [x] Docker Compose — single command to start all services
-- [ ] Deploy — HuggingFace Spaces (Python) + Vercel (frontend)
-- [ ] AI/RAG layer — LLM explains returned code chunks and answers follow-ups
+- [x] KMP + Boyer-Moore exact search with line/col resolution
+- [x] Semantic search — `st-codesearch-distilroberta-base`
+- [x] ChromaDB vector store — persistent, session-scoped, cosine similarity
+- [x] GitHub URL + zip upload indexing
+- [x] Hybrid scoring — semantic + keyword overlap
+- [x] Dynamic thresholding
+- [x] Session isolation — SQLite persistence + orphan sweep
+- [x] React frontend — dark theme, search + results
+- [x] RAG chat — streaming, [Chunk N] citations, resizable code panel
+- [x] Docker Compose
+- [ ] Deploy — HuggingFace Spaces + Vercel
 
 ---
 
