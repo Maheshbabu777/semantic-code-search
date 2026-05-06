@@ -100,49 +100,20 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let buffer = '';
-      let pendingText = '';
-      let flushTimer = null;
-
-      const flushText = () => {
-        if (!pendingText) return;
-        const text = pendingText;
-        pendingText = '';
-        setMessages(prev => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          const newContent = (last?.content || '') + text;
-
-          const cited = new Set(last?.citedChunks || []);
-          let m;
-          CHUNK_CITE_RE.lastIndex = 0;
-          while ((m = CHUNK_CITE_RE.exec(newContent)) !== null) {
-            cited.add(Number(m[1]));
-          }
-
-          updated[updated.length - 1] = {
-            ...last,
-            content: newContent,
-            citedChunks: [...cited],
-          };
-          return updated;
-        });
-      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const blocks = buffer.split('\n\n'); 
-        buffer = blocks.pop();
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
 
-        for (const block of blocks) {
-          const line = block.startsWith('data: ') ? block.slice(6) : null;
-          if (!line) continue;
-
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
           let event;
           try {
-            event = JSON.parse(line);
+            event = JSON.parse(line.slice(6));
           } catch {
             continue;
           }
@@ -159,9 +130,25 @@ export default function ChatPage() {
           }
 
           else if (event.type === 'text') {
-            pendingText += event.content;
-            if (flushTimer) clearTimeout(flushTimer);
-            flushTimer = setTimeout(flushText, 30);
+            setMessages(prev => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              const newContent = last.content + event.content;
+
+              const cited = new Set(last.citedChunks || []);
+              let m;
+              CHUNK_CITE_RE.lastIndex = 0;
+              while ((m = CHUNK_CITE_RE.exec(newContent)) !== null) {
+                cited.add(Number(m[1]));
+              }
+
+              updated[updated.length - 1] = {
+                ...last,
+                content: newContent,
+                citedChunks: [...cited],
+              };
+              return updated;
+            });
           }
 
           else if (event.type === 'error') {
@@ -169,9 +156,6 @@ export default function ChatPage() {
           }
         }
       }
-
-      if (flushTimer) clearTimeout(flushTimer);
-      flushText();
     } catch (err) {
       if (err.name === 'AbortError') {
         setMessages(prev => {
@@ -334,10 +318,10 @@ export default function ChatPage() {
                   justifyContent: 'center',
                 }}>
                   {[
-                    'What is this project about?',
-                    'How does the database layer work?',
-                    'Where is the main entry point?',
-                    'How do I run or build this project?',
+                    'How does chunking work?',
+                    'Explain the search pipeline',
+                    'How are sessions cleaned up?',
+                    'What algorithms are used for exact search?',
                   ].map(suggestion => (
                     <button
                       key={suggestion}
@@ -441,7 +425,7 @@ export default function ChatPage() {
                 marginTop: 8,
                 fontStyle: 'italic',
               }}>
-                history capped at last 4 messages sent to the model
+                history capped at last 10 messages sent to the model
               </p>
             )}
           </div>
