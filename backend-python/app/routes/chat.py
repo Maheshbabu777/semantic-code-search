@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import itertools
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -11,15 +12,41 @@ from app.searcher import search_code
 import app.state as state
 
 router = APIRouter()
-groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+
+_GROQ_KEYS = [
+    k
+    for k in [
+        os.getenv("GROQ_API_KEY1"),
+        os.getenv("GROQ_API_KEY2"),
+    ]
+    if k
+]
+
+_key_cycle = itertools.cycle(_GROQ_KEYS)
+
+
+def _get_client() -> AsyncGroq:
+    return AsyncGroq(api_key=next(_key_cycle))
+
 
 MODEL = "llama-3.3-70b-versatile"
-MAX_TOKENS = 2048
+MAX_TOKENS = 1024
 MAX_HISTORY = 10
 MAX_MSG_LEN = 2000
 MAX_QUERIES = 3
 MAX_CHUNKS_PER_QUERY = 4
 MAX_TOTAL_CHUNKS = 8
+
+
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: str
+    history: list[HistoryMessage] = []
 
 
 QUERY_PLANNER_SYSTEM = """\
@@ -113,6 +140,27 @@ MARKDOWN: Bold for identifiers, fenced blocks only for multi-line snippets.
 """
 
 
+def compress_history(history: list[HistoryMessage], keep_recent: int = 4) -> list[dict]:
+    if len(history) <= keep_recent:
+        return [{"role": m.role, "content": m.content} for m in history]
+
+    older = history[:-keep_recent]
+    recent = history[-keep_recent:]
+
+    summary_lines = []
+    for m in older:
+        role = "User" if m.role == "user" else "Assistant"
+        trimmed = m.content[:200] + "..." if len(m.content) > 200 else m.content
+        summary_lines.append(f"{role}: {trimmed}")
+
+    summary_msg = {
+        "role": "system",
+        "content": "Earlier conversation summary:\n" + "\n".join(summary_lines),
+    }
+
+    return [summary_msg] + [{"role": m.role, "content": m.content} for m in recent]
+
+
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
@@ -142,7 +190,7 @@ async def _plan_queries(
     user_content += f"New question: {message}"
 
     try:
-        resp = await groq_client.chat.completions.create(
+        resp = await _get_client().chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": QUERY_PLANNER_SYSTEM},
@@ -172,17 +220,21 @@ async def _plan_queries(
 
 async def _get_project_context(session_id: str) -> str:
     try:
-        results = search_code("main entry point project structure architecture overview", session_id, k=5)
+        results = search_code(
+            "main entry point project structure architecture overview", session_id, k=5
+        )
         if not results:
             return ""
-        
+
         context = "INDEXED PROJECT CONTEXT:\n\n"
         for idx, chunk in enumerate(results, 1):
             filepath = chunk["filepath"]
             start = chunk["start_line"]
             end = chunk["end_line"]
             code = chunk["code"][:500]
-            context += f"[File {idx}] {filepath} (lines {start}–{end}):\n```\n{code}\n```\n\n"
+            context += (
+                f"[File {idx}] {filepath} (lines {start}–{end}):\n```\n{code}\n```\n\n"
+            )
         return context
     except Exception:
         return ""
@@ -253,12 +305,12 @@ async def stream_response(req: "ChatRequest"):
 
     groq_messages = [
         {"role": "system", "content": system_prompt},
-        *[{"role": m.role, "content": m.content} for m in req.history[-MAX_HISTORY:]],
+        *compress_history(req.history[-MAX_HISTORY:]),
         {"role": "user", "content": req.message},
     ]
 
     try:
-        stream = await groq_client.chat.completions.create(
+        stream = await _get_client().chat.completions.create(
             model=MODEL,
             messages=groq_messages,
             max_tokens=MAX_TOKENS,
@@ -289,17 +341,6 @@ async def stream_response(req: "ChatRequest"):
         )
     except Exception as e:
         yield _sse({"type": "error", "message": f"LLM error: {str(e)}"})
-
-
-class HistoryMessage(BaseModel):
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    message: str
-    session_id: str
-    history: list[HistoryMessage] = []
 
 
 @router.post("/")
